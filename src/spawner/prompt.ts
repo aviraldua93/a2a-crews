@@ -36,7 +36,7 @@ YOUR ALLOWED TOOLS:
 ${toolsList}
 
 INSTRUCTIONS:
-1. Read the project to understand the codebase.
+1. ${ctx.agent.key.includes('review') ? 'Read the artifacts from prior tasks in artifacts/ to understand what was built. Focus on changed files, not the entire codebase.' : 'Read the project to understand the codebase.'}
 2. Execute your tasks in dependency order.
 3. For each task:
    - Check if dependencies are completed (look for their deliverable files in artifacts/)
