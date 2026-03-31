@@ -1,6 +1,6 @@
 {
   "name": "a2a-crews",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turn one command into a team of AI agents. Built on Google's A2A protocol.",
   "type": "module",
   "main": "src/cli/index.ts",
