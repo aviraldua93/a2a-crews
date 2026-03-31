@@ -1,0 +1,40 @@
+{
+  "name": "data-pipeline",
+  "description": "ETL workflow: extract → transform → load → validate",
+  "roles": [
+    {
+      "key": "extractor",
+      "description": "Reads raw data sources, handles formats (CSV, JSON, API, DB), validates completeness",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "transformer",
+      "description": "Cleans, normalizes, joins, aggregates data according to business rules",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "loader",
+      "description": "Writes to target format/location, validates schema, handles partitioning",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "validator",
+      "description": "Runs data quality checks end-to-end, compares input/output counts, spot-checks values",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    }
+  ],
+  "tasks": [
+    { "id": "extract", "title": "Read raw data sources, validate completeness and format", "assigned_to": "extractor", "depends_on": [] },
+    { "id": "transform", "title": "Clean, normalize, join, and aggregate data per business rules", "assigned_to": "transformer", "depends_on": ["extract"] },
+    { "id": "load", "title": "Write to target format/location, validate schema, handle partitioning", "assigned_to": "loader", "depends_on": ["transform"] },
+    { "id": "validate", "title": "Run data quality checks, compare input/output counts, spot-check values", "assigned_to": "validator", "depends_on": ["load"] }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "fullstack",
+  "description": "Full-stack feature spanning frontend and backend",
+  "roles": [
+    {
+      "key": "architect",
+      "description": "Defines the API contract and UI spec, and boundary ownership (which role owns which directories)",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "backend",
+      "description": "Implements the API endpoints, data models, and server-side logic",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": true, "code-review": false }
+    },
+    {
+      "key": "frontend",
+      "description": "Implements the UI components, pages, and client-side logic",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": true, "code-review": false }
+    },
+    {
+      "key": "reviewer",
+      "description": "Reviews the full stack for correctness, API contract adherence, and integration issues. Creates fix tasks for blocking findings.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task", "code-review"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": true }
+    }
+  ],
+  "tasks": [
+    { "id": "design", "title": "Design the API contract and UI spec", "assigned_to": "architect", "depends_on": [] },
+    { "id": "backend-impl", "title": "Implement the API and server-side logic", "assigned_to": "backend", "depends_on": ["design"] },
+    { "id": "frontend-impl", "title": "Implement the UI and client-side logic", "assigned_to": "frontend", "depends_on": ["design"] },
+    { "id": "review", "title": "Review full stack for correctness and integration", "assigned_to": "reviewer", "depends_on": ["backend-impl", "frontend-impl"] }
+  ]
+}

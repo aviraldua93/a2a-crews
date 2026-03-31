@@ -1,0 +1,40 @@
+{
+  "name": "ml-experiment",
+  "description": "Parallel model comparison: 3 experimenters → synthesizer picks winner",
+  "roles": [
+    {
+      "key": "experimenter-1",
+      "description": "Tests approach 1 (e.g., random forest / traditional ML), logs metrics and findings",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "experimenter-2",
+      "description": "Tests approach 2 (e.g., gradient boosting / ensemble), logs metrics and findings",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "experimenter-3",
+      "description": "Tests approach 3 (e.g., neural network / deep learning), logs metrics and findings",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "synthesizer",
+      "description": "Reads all experiment results, picks winner, writes comparison report",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    }
+  ],
+  "tasks": [
+    { "id": "experiment-1", "title": "Run experiment 1: traditional ML approach (e.g., random forest)", "assigned_to": "experimenter-1", "depends_on": [] },
+    { "id": "experiment-2", "title": "Run experiment 2: ensemble approach (e.g., gradient boosting)", "assigned_to": "experimenter-2", "depends_on": [] },
+    { "id": "experiment-3", "title": "Run experiment 3: deep learning approach (e.g., neural network)", "assigned_to": "experimenter-3", "depends_on": [] },
+    { "id": "synthesize", "title": "Compare all experiment results, pick winner, write comparison report", "assigned_to": "synthesizer", "depends_on": ["experiment-1", "experiment-2", "experiment-3"] }
+  ]
+}

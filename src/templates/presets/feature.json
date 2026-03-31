@@ -1,0 +1,33 @@
+{
+  "name": "feature",
+  "description": "Standard feature: design → implement → review",
+  "roles": [
+    {
+      "key": "architect",
+      "description": "Explores codebase, designs the spec, defines file structure and interfaces",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "coder",
+      "description": "Implements code from the architect's spec, writes tests, runs builds",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": true, "code-review": false }
+    },
+    {
+      "key": "reviewer",
+      "description": "Reviews implementation for correctness, security, edge cases, and test coverage. Creates fix tasks for blocking findings.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task", "code-review"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": true }
+    }
+  ],
+  "tasks": [
+    { "id": "design", "title": "Design the architecture and write spec", "assigned_to": "architect", "depends_on": [] },
+    { "id": "implement", "title": "Implement the feature based on spec", "assigned_to": "coder", "depends_on": ["design"] },
+    { "id": "write-tests", "title": "Write tests for the implementation", "assigned_to": "coder", "depends_on": ["design"] },
+    { "id": "review", "title": "Review code and tests for correctness", "assigned_to": "reviewer", "depends_on": ["implement", "write-tests"] }
+  ]
+}

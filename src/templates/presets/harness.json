@@ -1,0 +1,44 @@
+{
+  "name": "harness",
+  "description": "Iterative build with evaluator feedback loop (Anthropic harness pattern)",
+  "roles": [
+    {
+      "key": "planner",
+      "description": "Expands the scenario into a detailed product spec with features, acceptance criteria, and technical constraints. Defines what 'done' looks like for each feature.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "generator",
+      "description": "Implements features from the spec one at a time. After each evaluator review, either refines the current approach or pivots to a different strategy. Writes code, tests, and documentation.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "evaluator",
+      "description": "Grades each implementation sprint against criteria: feature completeness, design quality, code craft, and functionality. Runs the application, tests it, files bugs. Creates fix tasks for the generator if thresholds aren't met.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "write-spec",
+      "title": "Expand scenario into detailed product spec with features and acceptance criteria",
+      "assigned_to": "planner",
+      "depends_on": []
+    },
+    {
+      "id": "implement",
+      "title": "Implement all features from the spec, with tests",
+      "assigned_to": "generator",
+      "depends_on": ["write-spec"]
+    },
+    {
+      "id": "evaluate",
+      "title": "Grade implementation against spec criteria, run app, file bugs, create fix tasks if needed",
+      "assigned_to": "evaluator",
+      "depends_on": ["implement"]
+    }
+  ]
+}

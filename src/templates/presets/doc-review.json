@@ -1,0 +1,43 @@
+{
+  "name": "doc-review",
+  "description": "Parallel documentation review: accuracy + completeness + audience + platform → synthesis",
+  "roles": [
+    {
+      "key": "accuracy-reviewer",
+      "description": "Reviews documentation for factual accuracy: correct code examples, valid API references, accurate command syntax, and truthful claims about behavior",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore"]
+    },
+    {
+      "key": "completeness-reviewer",
+      "description": "Reviews documentation for completeness: missing sections, undocumented features, gaps in setup instructions, missing prerequisites, and incomplete examples",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore"]
+    },
+    {
+      "key": "audience-reviewer",
+      "description": "Reviews documentation for audience fit: appropriate tone, assumed knowledge level, clarity of explanations, jargon usage, and onboarding friendliness",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore"]
+    },
+    {
+      "key": "platform-reviewer",
+      "description": "Reviews documentation for cross-platform correctness: OS-specific instructions, path conventions, shell compatibility, environment variable handling, and tool availability",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore"]
+    },
+    {
+      "key": "synthesizer",
+      "description": "Reads all review reports, deduplicates findings, assigns severity ratings, and writes a unified documentation improvement plan with prioritized action items",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    }
+  ],
+  "tasks": [
+    { "id": "accuracy-review", "title": "Review documentation for factual accuracy and correct code examples", "assigned_to": "accuracy-reviewer", "depends_on": [] },
+    { "id": "completeness-review", "title": "Review documentation for completeness and coverage of all features", "assigned_to": "completeness-reviewer", "depends_on": [] },
+    { "id": "audience-review", "title": "Review documentation for audience appropriateness and clarity", "assigned_to": "audience-reviewer", "depends_on": [] },
+    { "id": "platform-review", "title": "Review documentation for cross-platform correctness and compatibility", "assigned_to": "platform-reviewer", "depends_on": [] },
+    { "id": "synthesize", "title": "Synthesize all review findings into a prioritized documentation improvement plan", "assigned_to": "synthesizer", "depends_on": ["accuracy-review", "completeness-review", "audience-review", "platform-review"] }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "ship",
+  "description": "Release workflow: QA → review → ship",
+  "roles": [
+    {
+      "key": "release-manager",
+      "description": "Coordinates the release: runs tests, checks CI, manages version bump and changelog",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "qa",
+      "description": "Tests the feature branch: smoke tests, regression checks, edge case validation",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "reviewer",
+      "description": "Pre-landing code review: security, correctness, test coverage, API contract adherence. Creates fix tasks for blocking findings.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    }
+  ],
+  "tasks": [
+    { "id": "qa-pass", "title": "Run QA: smoke tests, regression checks, edge case validation", "assigned_to": "qa", "depends_on": [] },
+    { "id": "code-review", "title": "Pre-landing review: security, correctness, test coverage", "assigned_to": "reviewer", "depends_on": [] },
+    { "id": "ship", "title": "Merge, version bump, changelog, create PR", "assigned_to": "release-manager", "depends_on": ["qa-pass", "code-review"] }
+  ]
+}

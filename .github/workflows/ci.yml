@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+      - name: Type check
+        run: bun x tsc --noEmit
+
+      - name: Validate preset JSONs
+        run: |
+          for f in src/templates/presets/*.json; do
+            echo "Validating $f..."
+            bun -e "JSON.parse(require('fs').readFileSync('$f', 'utf-8')); console.log('✅ $f')" || exit 1
+          done

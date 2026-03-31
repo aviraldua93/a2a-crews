@@ -1,0 +1,36 @@
+{
+  "name": "audit",
+  "description": "Parallel code audit: security + performance + quality → synthesis",
+  "roles": [
+    {
+      "key": "security-reviewer",
+      "description": "Audits for security vulnerabilities: auth flaws, injection, data exposure, dependency risks",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "perf-reviewer",
+      "description": "Audits for performance issues: N+1 queries, memory leaks, bundle size, slow paths, caching gaps",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "quality-reviewer",
+      "description": "Audits code quality: dead code, test coverage gaps, inconsistent patterns, missing docs, tech debt",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "synthesizer",
+      "description": "Reads all audit reports, prioritizes findings, writes unified recommendations with severity ratings",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    }
+  ],
+  "tasks": [
+    { "id": "security-audit", "title": "Audit for security vulnerabilities and data exposure risks", "assigned_to": "security-reviewer", "depends_on": [] },
+    { "id": "perf-audit", "title": "Audit for performance bottlenecks and optimization opportunities", "assigned_to": "perf-reviewer", "depends_on": [] },
+    { "id": "quality-audit", "title": "Audit code quality, test coverage, and tech debt", "assigned_to": "quality-reviewer", "depends_on": [] },
+    { "id": "synthesize", "title": "Synthesize all findings into prioritized recommendations", "assigned_to": "synthesizer", "depends_on": ["security-audit", "perf-audit", "quality-audit"] }
+  ]
+}

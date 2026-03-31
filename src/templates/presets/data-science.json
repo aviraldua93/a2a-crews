@@ -1,0 +1,41 @@
+{
+  "name": "data-science",
+  "description": "Full data science pipeline: profile → features → train → evaluate → report",
+  "roles": [
+    {
+      "key": "data-engineer",
+      "description": "Cleans raw data, handles missing values, builds feature pipelines, validates data quality",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "modeler",
+      "description": "Trains models, tunes hyperparameters, compares approaches (sklearn, xgboost, etc.)",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "evaluator",
+      "description": "Tests on holdout set, checks for bias/fairness, validates metrics, runs cross-validation",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "reporter",
+      "description": "Writes findings, generates visualizations, creates summary report",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    }
+  ],
+  "tasks": [
+    { "id": "data-profile", "title": "Profile the dataset: shape, dtypes, nulls, distributions, correlations", "assigned_to": "data-engineer", "depends_on": [] },
+    { "id": "feature-engineering", "title": "Clean data, handle missing values, create features, split train/test", "assigned_to": "data-engineer", "depends_on": ["data-profile"] },
+    { "id": "train-models", "title": "Train 3+ model approaches, log metrics, save best model", "assigned_to": "modeler", "depends_on": ["feature-engineering"] },
+    { "id": "evaluate", "title": "Evaluate best model: accuracy, precision, recall, F1, confusion matrix, bias check", "assigned_to": "evaluator", "depends_on": ["train-models"] },
+    { "id": "report", "title": "Write executive summary with findings, model performance, recommendations", "assigned_to": "reporter", "depends_on": ["evaluate"] }
+  ]
+}

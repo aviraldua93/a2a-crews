@@ -1,0 +1,40 @@
+{
+  "name": "refactor",
+  "description": "Safe codebase refactoring",
+  "roles": [
+    {
+      "key": "explorer",
+      "description": "Maps the codebase, identifies what needs to change, and documents the refactoring plan",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": false }
+    },
+    {
+      "key": "coder",
+      "description": "Makes the refactoring changes according to the explorer's plan",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": true, "code-review": false }
+    },
+    {
+      "key": "tester",
+      "description": "Runs existing tests and writes new tests to verify the refactoring is safe",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": true, "code-review": false }
+    },
+    {
+      "key": "reviewer",
+      "description": "Reviews all changes for regressions, correctness, and code quality. Creates fix tasks for blocking findings.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell", "task", "code-review"],
+      "sub_agent_policy": { "explore": true, "task": true, "general-purpose": false, "code-review": true }
+    }
+  ],
+  "tasks": [
+    { "id": "explore", "title": "Map the codebase and document the refactoring plan", "assigned_to": "explorer", "depends_on": [] },
+    { "id": "implement", "title": "Make the refactoring changes per the plan", "assigned_to": "coder", "depends_on": ["explore"] },
+    { "id": "write-tests", "title": "Run existing tests and write new tests for changed code", "assigned_to": "tester", "depends_on": ["explore"] },
+    { "id": "review", "title": "Review all changes for regressions and correctness", "assigned_to": "reviewer", "depends_on": ["implement", "write-tests"] }
+  ]
+}

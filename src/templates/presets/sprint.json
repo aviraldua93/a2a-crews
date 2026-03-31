@@ -1,0 +1,43 @@
+{
+  "name": "sprint",
+  "description": "Full sprint team: plan → design → implement → QA → review",
+  "roles": [
+    {
+      "key": "pm",
+      "description": "Breaks down the user story into actionable tasks, defines acceptance criteria, prioritizes scope",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "architect",
+      "description": "Designs technical approach, defines interfaces, identifies risks and dependencies",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "coder",
+      "description": "Implements the feature based on PM scope and architect spec, writes unit tests",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "qa",
+      "description": "Tests the implementation: functional tests, edge cases, regression, integration",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    },
+    {
+      "key": "reviewer",
+      "description": "Final code review: correctness, security, performance, test coverage, documentation. Creates fix tasks for blocking findings.",
+      "model": null,
+      "allowed_tools": ["view", "glob", "grep", "explore", "edit", "create", "powershell"]
+    }
+  ],
+  "tasks": [
+    { "id": "scope", "title": "Break down user story into tasks with acceptance criteria", "assigned_to": "pm", "depends_on": [] },
+    { "id": "design", "title": "Design technical approach, interfaces, and risk assessment", "assigned_to": "architect", "depends_on": ["scope"] },
+    { "id": "implement", "title": "Implement the feature with unit tests", "assigned_to": "coder", "depends_on": ["design"] },
+    { "id": "qa-pass", "title": "Test implementation: functional, edge cases, regression", "assigned_to": "qa", "depends_on": ["implement"] },
+    { "id": "review", "title": "Final review: correctness, security, performance, docs", "assigned_to": "reviewer", "depends_on": ["implement"] }
+  ]
+}
