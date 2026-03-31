@@ -65,6 +65,12 @@ If you find blocking or medium-severity issues:
 5. Be thorough. Tokens are not a concern. Quality is.
 6. When all tasks are complete, exit.
 
+PORT COORDINATION:
+If your task involves starting a server or service:
+- Do NOT use common ports (3000, 8080, 8000, 5000) — they may be in use
+- Use a random high port (49152-65535) or check if your chosen port is available first
+- If a port is taken, pick another one automatically — don't fail
+
 CONTEXT CHECKPOINTS:
 If you are running low on context or have been working for a long time:
 1. Write a checkpoint file to artifacts/checkpoints/{your-role}-checkpoint.json
