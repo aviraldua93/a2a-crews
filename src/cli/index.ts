@@ -15,6 +15,17 @@ import { printHeader, printRoles, printTasks, printSummary } from './display';
 
 const BASE_DIR = join(process.cwd(), '.a2a-crews');
 
+/** Check if the project has recent uncommitted changes (proxy for agent activity). */
+function isProjectActive(projectDir: string): boolean {
+  try {
+    const { execSync } = require('child_process');
+    const diff = execSync(`git -C "${projectDir}" status --porcelain 2>nul || echo ""`, {
+      encoding: 'utf-8', timeout: 5000,
+    });
+    return diff.trim().length > 0;
+  } catch { return false; }
+}
+
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
@@ -446,6 +457,16 @@ async function handleLaunch(teamName?: string): Promise<void> {
           const stuckDuration = Date.now() - submittedTime;
 
           if (stuckDuration > DEAD_AGENT_TIMEOUT_MS) {
+            // Before retrying, check if agent is still actively working
+            if (isProjectActive(process.cwd())) {
+              if (elapsed % 60 === 0) {
+                console.log(`    ⏳ ${task.id} — still working (project files changing, ${elapsed}s)`);
+              }
+              allDone = false;
+              continue; // Don't retry — agent is alive
+            }
+
+            // Only retry if NO file activity AND no deliverable
             const currentAttempts = spawnAttempts.get(task.id) ?? 0;
 
             if (currentAttempts >= MAX_RETRIES) {
@@ -531,9 +552,9 @@ async function handleLaunch(teamName?: string): Promise<void> {
         console.log(`    ⏳ Still waiting... (${elapsed}s)`);
       }
 
-      // Timeout after 15 min
-      if (elapsed > 900) {
-        console.log(`    ⚠️  Wave ${waveIdx + 1} timed out after 15 minutes`);
+      // Timeout after 30 min
+      if (elapsed > 1800) {
+        console.log(`    ⚠️  Wave ${waveIdx + 1} timed out after 30 minutes`);
         break;
       }
     }
@@ -551,8 +572,27 @@ async function handleLaunch(teamName?: string): Promise<void> {
     // Bridge may already be unreachable — best-effort
   }
 
-  bridge.stop();
-  process.exit(0);
+  // Don't stop bridge — agents may still need it
+  const stopFile = join(teamDir, '.stop');
+  console.log(`  🌉 Bridge still running on port ${bridge.actualPort}. Run 'crews stop ${teamName}' or press Ctrl+C.`);
+
+  // Handle graceful shutdown via Ctrl+C
+  process.on('SIGINT', () => {
+    console.log('\n  🛑 Stopping bridge...');
+    bridge.stop();
+    process.exit(0);
+  });
+
+  // Poll for stop signal file (from crews stop command)
+  const keepAlive = setInterval(async () => {
+    if (existsSync(stopFile)) {
+      clearInterval(keepAlive);
+      bridge.stop();
+      unlinkSync(stopFile);
+      console.log('  🛑 Bridge stopped via crews stop.');
+      process.exit(0);
+    }
+  }, 2000);
 }
 
 // ── Watch ─────────────────────────────────────────────────────────────
@@ -634,44 +674,46 @@ async function handleStop(teamName?: string): Promise<void> {
     process.exit(1);
   }
 
-  const bridgePath = join(BASE_DIR, teamName, 'bridge.json');
-  if (!existsSync(bridgePath)) {
-    console.log(`  ❌ No bridge found for team "${teamName}".`);
+  const teamDir = join(BASE_DIR, teamName);
+  if (!existsSync(teamDir)) {
+    console.log(`  Team '${teamName}' not found.`);
     process.exit(1);
   }
 
-  const bridgeInfo = await Bun.file(bridgePath).json() as { url: string };
-  const bridgeUrl = bridgeInfo.url;
-
   printHeader('STOPPING CREW');
 
-  try {
-    // Fetch all tasks and cancel non-terminal ones
-    const tasksRes = await fetch(`${bridgeUrl}/tasks`);
-    const tasks = await tasksRes.json() as { id: string; status: string }[];
+  const bridgePath = join(teamDir, 'bridge.json');
+  if (existsSync(bridgePath)) {
+    const bridgeInfo = await Bun.file(bridgePath).json() as { url: string };
+    const bridgeUrl = bridgeInfo.url;
 
-    let canceled = 0;
-    for (const task of tasks) {
-      if (!['completed', 'failed', 'canceled'].includes(task.status)) {
-        await fetch(`${bridgeUrl}/tasks/${task.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'canceled' }),
-        });
-        canceled++;
+    try {
+      // Cancel non-terminal tasks before sending stop signal
+      const tasksRes = await fetch(`${bridgeUrl}/tasks`);
+      const tasks = await tasksRes.json() as { id: string; status: string }[];
+
+      let canceled = 0;
+      for (const task of tasks) {
+        if (!['completed', 'failed', 'canceled'].includes(task.status)) {
+          await fetch(`${bridgeUrl}/tasks/${task.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'canceled' }),
+          });
+          canceled++;
+        }
       }
+      if (canceled > 0) {
+        console.log(`  Canceled ${canceled} task(s).`);
+      }
+    } catch {
+      // Bridge may already be unreachable — proceed with stop signal anyway
     }
-
-    console.log(`  Canceled ${canceled} task(s).`);
-
-    // Stop bridge by sending an invalid request (graceful — bridge is in-process for launch,
-    // but for stop we're a separate process, so we just report)
-    console.log('  🛑 Stopped.');
-    console.log(`  Note: The bridge process (in the launch terminal) should exit on its own.\n`);
-  } catch {
-    console.log('  ⚠️  Bridge unreachable — it may have already stopped.');
   }
 
+  // Write stop signal file — the launch process polls for this
+  await Bun.write(join(teamDir, '.stop'), new Date().toISOString());
+  console.log(`  🛑 Stop signal sent to team '${teamName}'. Bridge will shut down shortly.`);
   process.exit(0);
 }
 
