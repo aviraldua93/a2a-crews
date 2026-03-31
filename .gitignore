@@ -27,3 +27,8 @@ coverage/
 
 # IntelliJ based IDEs
 .idea
+
+# a2a-crews runtime
+.a2a-crews/
+.a2a-crews-*
+*.prompt.txt
