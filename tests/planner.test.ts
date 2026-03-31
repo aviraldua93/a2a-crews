@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { composeFromTemplate, composeFromPlan, findBestTemplate } from '../src/planner/composer';
 import { isPlanApproved, planSummary, type Plan } from '../src/planner/plan';
+import { isAIPlannerAvailable } from '../src/planner/ai-planner';
 
 describe('composeFromTemplate', () => {
   it('creates agents and tasks from feature template', () => {
@@ -77,5 +78,12 @@ describe('planSummary', () => {
     expect(summary).toContain('92%');
     expect(summary).toContain('2 roles');
     expect(summary).toContain('1 tasks');
+  });
+});
+
+describe('isAIPlannerAvailable', () => {
+  it('returns a boolean', () => {
+    const result = isAIPlannerAvailable();
+    expect(typeof result).toBe('boolean');
   });
 });

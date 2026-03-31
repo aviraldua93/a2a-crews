@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 import { join } from 'path';
-import { mkdirSync, existsSync, writeFileSync } from 'fs';
-import { composeFromTemplate, composeFromPlan, findBestTemplate, assessFeasibility } from '../planner';
+import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
+import { composeFromTemplate, composeFromPlan, findBestTemplate, assessFeasibility, runAIPlanner, isAIPlannerAvailable } from '../planner';
 import { planSummary, type Plan } from '../planner/plan';
 import { Task } from '../crew/task';
 import { Agent } from '../crew/agent';
@@ -53,6 +53,34 @@ async function handlePlan(scenario: string): Promise<void> {
   printHeader('PLANNING');
   console.log(`  Scenario: ${scenario}\n`);
 
+  const planDir = join(process.cwd(), '.a2a-crews');
+
+  // Remove old plan
+  const oldPlan = join(planDir, 'plan.json');
+  if (existsSync(oldPlan)) {
+    unlinkSync(oldPlan);
+  }
+
+  // Try AI planner first
+  if (isAIPlannerAvailable()) {
+    console.log('  🤖 AI planner available — spawning intelligent planner\n');
+    const success = await runAIPlanner(scenario, process.cwd());
+
+    if (success) {
+      // Read and display the AI-generated plan
+      const plan = await Bun.file(join(planDir, 'plan.json')).json() as Plan;
+      displayPlan(plan);
+      console.log(`  ✅ AI plan written to ${join(planDir, 'plan.json')}`);
+      console.log('  Run `crews apply` to create the team.\n');
+      process.exit(0);
+    }
+
+    console.log('  ⚠️  AI planner failed — falling back to template matching\n');
+  } else {
+    console.log('  ℹ️  Copilot CLI not found — using template matching\n');
+  }
+
+  // Fallback: keyword-based template matching
   const templateName = findBestTemplate(scenario);
 
   if (!templateName) {
@@ -77,7 +105,6 @@ async function handlePlan(scenario: string): Promise<void> {
   console.log(`    ${assessment.overall.recommendation}\n`);
 
   const { agents, tasks } = composeFromTemplate(templateName, scenario);
-  const preset = loadPreset(templateName);
 
   const plan: Plan = {
     scenario,
@@ -104,16 +131,7 @@ async function handlePlan(scenario: string): Promise<void> {
     basedOnTemplate: templateName,
   };
 
-  console.log(`  ${planSummary(plan)}\n`);
-
-  printRoles(plan.roles.map(r => ({ key: r.key, description: r.description })));
-  printTasks(plan.tasks.map(t => ({
-    id: t.id,
-    title: t.title,
-    assignedTo: t.assignedTo,
-    dependsOn: t.dependsOn,
-    status: t.dependsOn.length > 0 ? 'blocked' : 'pending',
-  })));
+  displayPlan(plan);
 
   // Write plan to disk
   mkdirSync(BASE_DIR, { recursive: true });
@@ -122,6 +140,35 @@ async function handlePlan(scenario: string): Promise<void> {
 
   console.log(`  ✅ Plan written to ${planPath}`);
   console.log('  Run `crews apply` to create the team.\n');
+}
+
+function displayPlan(plan: Plan): void {
+  // Feasibility
+  console.log(`  FEASIBILITY`);
+  const icon = plan.feasibility.verdict === 'go' ? '✅' : plan.feasibility.verdict === 'risky' ? '⚠️' : '🛑';
+  console.log(`    ${icon} ${plan.feasibility.verdict.toUpperCase()} (${Math.round(plan.feasibility.confidence * 100)}%)`);
+  if (plan.feasibility.concerns.length > 0) {
+    for (const c of plan.feasibility.concerns) {
+      console.log(`    • ${c}`);
+    }
+  }
+  console.log(`    ${plan.feasibility.recommendation}\n`);
+
+  // Summary
+  console.log(`  ${planSummary(plan)}\n`);
+  if (plan.rationale) {
+    console.log(`  Rationale: ${plan.rationale}\n`);
+  }
+
+  // Roles & tasks
+  printRoles(plan.roles.map(r => ({ key: r.key, description: r.description })));
+  printTasks(plan.tasks.map(t => ({
+    id: t.id,
+    title: t.title,
+    assignedTo: t.assignedTo,
+    dependsOn: t.dependsOn,
+    status: t.dependsOn.length > 0 ? 'blocked' : 'pending',
+  })));
 }
 
 // ── Apply ─────────────────────────────────────────────────────────────
