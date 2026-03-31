@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { join } from 'path';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, writeFileSync } from 'fs';
 import { composeFromTemplate, composeFromPlan, findBestTemplate, assessFeasibility } from '../planner';
 import { planSummary, type Plan } from '../planner/plan';
 import { Task } from '../crew/task';
@@ -494,6 +494,15 @@ async function handleLaunch(teamName?: string): Promise<void> {
 
   const totalTime = (Date.now() - startTime) / 1000;
   printSummary(totalTime, waves.length, tasksCompleted, taskObjects.length, totalRetries, failedTasks);
+
+  // Persist event log before stopping the bridge
+  try {
+    const logRes = await fetch(`${bridgeUrl}/events/log`);
+    const logEntries = await logRes.json() as string[];
+    writeFileSync(join(teamDir, 'events.log'), logEntries.join('\n') + '\n');
+  } catch {
+    // Bridge may already be unreachable — best-effort
+  }
 
   bridge.stop();
   process.exit(0);

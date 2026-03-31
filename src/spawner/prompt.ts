@@ -55,6 +55,12 @@ INSTRUCTIONS:
 5. Be thorough. Tokens are not a concern. Quality is.
 6. When all tasks are complete, exit.
 
+CONTEXT CHECKPOINTS:
+If you are running low on context or have been working for a long time:
+1. Write a checkpoint file to artifacts/checkpoints/{your-role}-checkpoint.json
+2. Include: completed work, remaining work, key decisions, files modified
+3. A fresh session can resume from your checkpoint
+
 DELIVERABLE FORMAT:
 Every deliverable must include:
   - Summary (1-2 sentences)

@@ -57,9 +57,15 @@ export class A2ABridge {
   private events: EventEmitter = new EventEmitter();
   private server: ReturnType<typeof Bun.serve> | null = null;
   private port: number;
+  private eventLog: string[] = [];
 
   constructor(port: number = 8222) {
     this.port = port;
+  }
+
+  private logEvent(type: string, taskId: string, agentName: string, detail: string): void {
+    const entry = `${new Date().toISOString()}|${type}|${taskId}|${agentName}|${detail}`;
+    this.eventLog.push(entry);
   }
 
   /** Start the bridge HTTP server. */
@@ -144,6 +150,11 @@ export class A2ABridge {
         return this.handleSSE(req);
       }
 
+      // ── Event log (WAL) ────────────────────────────────────
+      if (method === 'GET' && path === '/events/log') {
+        return this.jsonOk(this.eventLog);
+      }
+
       // ── Status ────────────────────────────────────────────────
       if (method === 'GET' && path === '/status') {
         return this.handleStatus();
@@ -204,6 +215,7 @@ export class A2ABridge {
     };
 
     this.agents.set(name, agent);
+    this.logEvent('agent_registered', '', name, (skills as string[]).join(','));
     this.emit('agent:registered', { agent: name });
 
     return this.jsonOk({ ok: true, agent }, 201);
@@ -232,6 +244,7 @@ export class A2ABridge {
     ) {
       agent.status = body.status as RegisteredAgent['status'];
     }
+    this.logEvent('heartbeat', '', name, agent.status);
     this.emit('agent:heartbeat', { agent: name, status: agent.status });
 
     return this.jsonOk({ ok: true, agent });
@@ -292,6 +305,7 @@ export class A2ABridge {
     };
 
     this.tasks.set(task.id, task);
+    this.logEvent('task_created', task.id, assignedTo, task.message);
     this.emit('task:created', { taskId: task.id, assignedTo });
 
     return this.jsonOk({ ok: true, task }, 201);
@@ -343,6 +357,7 @@ export class A2ABridge {
     }
 
     task.updatedAt = new Date().toISOString();
+    this.logEvent('task_updated', id, task.assignedTo, task.status);
 
     if (task.status === 'completed') {
       this.emit('task:completed', { taskId: id });
@@ -522,6 +537,7 @@ export class A2ABridge {
         };
 
         this.tasks.set(task.id, task);
+        this.logEvent('task_created', task.id, task.assignedTo, task.message);
         this.emit('task:created', { taskId: task.id, assignedTo: task.assignedTo });
 
         return Response.json({
@@ -577,6 +593,7 @@ export class A2ABridge {
         }
         task.status = 'canceled';
         task.updatedAt = new Date().toISOString();
+        this.logEvent('task_updated', task.id, task.assignedTo, 'canceled');
         this.emit('task:updated', { taskId: task.id, status: 'canceled' });
 
         return Response.json({
