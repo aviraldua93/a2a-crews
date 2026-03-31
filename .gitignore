@@ -1,0 +1,29 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+Thumbs.db
+.agent-teams/
+
+# output
+out/
+*.tgz
+
+# code coverage
+coverage/
+*.lcov
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
