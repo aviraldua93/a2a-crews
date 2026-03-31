@@ -37,6 +37,16 @@ ${toolsList}
 
 INSTRUCTIONS:
 1. ${ctx.agent.key.includes('review') ? 'Read the artifacts from prior tasks in artifacts/ to understand what was built. Focus on changed files, not the entire codebase.' : 'Read the project to understand the codebase.'}
+${ctx.agent.key.includes('review') ? `
+REVIEW FEEDBACK LOOP:
+If you find blocking or medium-severity issues:
+1. Write your review findings to your deliverable (as normal)
+2. For each BLOCKING issue, create a fix task file at artifacts/fix-{N}.json:
+   {"id": "fix-1", "title": "Fix: description of issue", "assignedTo": "coder", "severity": "blocking"}
+3. The orchestrator will detect these fix files and run another wave
+4. LOW severity: mention in review only, don't create fix tasks
+5. If everything is clean: just write your review, no fix files needed
+` : ''}
 2. Execute your tasks in dependency order.
 3. For each task:
    - Check if dependencies are completed (look for their deliverable files in artifacts/)
