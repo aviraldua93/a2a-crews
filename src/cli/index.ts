@@ -320,28 +320,55 @@ async function handleLaunch(teamName?: string): Promise<void> {
       });
     }
 
-    // Poll bridge for wave completion (all tasks in wave completed/failed/canceled)
+    // Poll bridge for wave completion (with evidence-based fallback)
     console.log(`    ⏳ Waiting for wave ${waveIdx + 1} to complete...`);
     const waveTaskUuids = wave.map(t => bridgeTaskIds.get(t.id)!);
     let waveComplete = false;
+    let elapsed = 0;
 
     while (!waveComplete) {
       await new Promise(resolve => setTimeout(resolve, 5000));
+      elapsed += 5;
 
       let allDone = true;
-      for (const uuid of waveTaskUuids) {
+      for (let i = 0; i < waveTaskUuids.length; i++) {
+        const uuid = waveTaskUuids[i];
+        const task = wave[i];
         const res = await fetch(`${bridgeUrl}/tasks/${uuid}`);
         const body = await res.json() as { status: string };
-        if (!['completed', 'failed', 'canceled'].includes(body.status)) {
-          allDone = false;
-          break;
+
+        if (['completed', 'failed', 'canceled'].includes(body.status)) {
+          continue; // Already done on bridge
         }
+
+        // Evidence-based recovery: check if deliverable file exists
+        const deliverablePath = join(teamDir, task.deliverable);
+        if (existsSync(deliverablePath)) {
+          // Agent wrote deliverable but didn't update bridge — recover
+          console.log(`    🔧 ${task.id} — recovered (deliverable exists, updating bridge)`);
+          await fetch(`${bridgeUrl}/tasks/${uuid}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'completed', result: 'Recovered from deliverable evidence' }),
+          });
+          continue;
+        }
+
+        allDone = false;
       }
 
       if (allDone) {
         waveComplete = true;
         tasksCompleted += wave.length;
-        console.log(`    ✅ Wave ${waveIdx + 1} complete\n`);
+        console.log(`    ✅ Wave ${waveIdx + 1} complete (${elapsed}s)\n`);
+      } else if (elapsed % 30 === 0) {
+        console.log(`    ⏳ Still waiting... (${elapsed}s)`);
+      }
+
+      // Timeout after 15 min
+      if (elapsed > 900) {
+        console.log(`    ⚠️  Wave ${waveIdx + 1} timed out after 15 minutes`);
+        break;
       }
     }
   }

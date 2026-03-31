@@ -27,6 +27,7 @@ export function generateAgentPrompt(ctx: PromptContext): string {
 PROJECT: ${ctx.projectDir}
 SCENARIO: ${ctx.scenario}
 YOUR ROLE: ${ctx.agent.description}
+BRIDGE: ${ctx.bridgeUrl}
 
 YOUR TASKS:
 ${taskList}
@@ -42,9 +43,17 @@ INSTRUCTIONS:
    - If blocked, wait and check again in 30 seconds
    - When ready, do the work thoroughly. Spawn sub-agents for exploration.
    - Write your deliverable to artifacts/${ctx.tasks[0]?.id ?? 'output'}.md
-   - Mark task status as done
-4. Be thorough. Tokens are not a concern. Quality is.
-5. When all tasks are complete, exit.
+
+4. CRITICAL — After completing EACH task, report to the bridge:
+   Run this PowerShell command (or equivalent curl):
+   
+   Invoke-RestMethod -Uri '${ctx.bridgeUrl}/tasks/{TASK_ID}' -Method PATCH -ContentType 'application/json' -Body '{"status":"completed","result":"Task completed successfully"}'
+   
+   Replace {TASK_ID} with the actual task ID from YOUR TASKS above.
+   The task IDs are: ${ctx.tasks.map(t => t.id).join(', ')}
+
+5. Be thorough. Tokens are not a concern. Quality is.
+6. When all tasks are complete, exit.
 
 DELIVERABLE FORMAT:
 Every deliverable must include:
@@ -52,5 +61,5 @@ Every deliverable must include:
   - Details / Files Changed
   - Acceptance Criteria Status (☑/☐ for each)
 
-IMPORTANT: Begin by exploring the codebase. Then execute your tasks.`;
+IMPORTANT: Begin by exploring the codebase. Then execute your tasks. ALWAYS report completion to the bridge after each task.`;
 }
