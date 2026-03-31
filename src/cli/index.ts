@@ -2,7 +2,7 @@
 
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
-import { composeFromTemplate, composeFromPlan, findBestTemplate } from '../planner';
+import { composeFromTemplate, composeFromPlan, findBestTemplate, assessFeasibility } from '../planner';
 import { planSummary, type Plan } from '../planner/plan';
 import { Task } from '../crew/task';
 import { Agent } from '../crew/agent';
@@ -63,16 +63,29 @@ async function handlePlan(scenario: string): Promise<void> {
 
   console.log(`  📋 Best template: ${templateName}\n`);
 
+  // Run heuristic feasibility assessment
+  const assessment = assessFeasibility(scenario, process.cwd());
+
+  console.log(`  FEASIBILITY`);
+  const icon = assessment.overall.verdict === 'go' ? '✅' : assessment.overall.verdict === 'risky' ? '⚠️' : '🛑';
+  console.log(`    ${icon} ${assessment.overall.verdict.toUpperCase()} (${Math.round(assessment.overall.confidence * 100)}%)`);
+  if (assessment.overall.concerns.length > 0) {
+    for (const c of assessment.overall.concerns) {
+      console.log(`    • ${c}`);
+    }
+  }
+  console.log(`    ${assessment.overall.recommendation}\n`);
+
   const { agents, tasks } = composeFromTemplate(templateName, scenario);
   const preset = loadPreset(templateName);
 
   const plan: Plan = {
     scenario,
     feasibility: {
-      verdict: 'go',
-      confidence: 0.85,
-      concerns: [],
-      recommendation: `Use the "${templateName}" template`,
+      verdict: assessment.overall.verdict,
+      confidence: assessment.overall.confidence,
+      concerns: assessment.overall.concerns,
+      recommendation: assessment.overall.recommendation,
     },
     rationale: `Auto-composed from "${templateName}" preset based on keyword matching.`,
     roles: agents.map(a => ({
