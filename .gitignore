@@ -32,3 +32,5 @@ coverage/
 .a2a-crews/
 .a2a-crews-*
 *.prompt.txt
+crews.exe
+crews
