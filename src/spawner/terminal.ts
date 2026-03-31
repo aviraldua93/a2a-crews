@@ -56,6 +56,7 @@ export async function spawnAgent(config: {
   cwd: string;
   model?: string;
   bridgeUrl: string;
+  taskId?: string;
 }): Promise<void> {
   const platform = detectPlatform();
   const modelFlag = config.model ? ` --model "${config.model}"` : '';
@@ -64,13 +65,19 @@ export async function spawnAgent(config: {
   const promptFile = `${config.cwd}/.a2a-crews-prompt-${config.name}.txt`.replace(/\//g, platform === 'windows' ? '\\' : '/');
   await Bun.write(promptFile, config.prompt);
 
+  // Build post-completion bridge notification
+  const bridgeNotify = config.taskId && config.bridgeUrl
+    ? platform === 'windows'
+      ? `; try { Invoke-RestMethod -Uri '${config.bridgeUrl}/tasks/${config.taskId}' -Method PATCH -ContentType 'application/json' -Body '{"status":"completed","result":"Agent completed"}' -ErrorAction SilentlyContinue } catch {}`
+      : `; curl -s -X PATCH '${config.bridgeUrl}/tasks/${config.taskId}' -H 'Content-Type: application/json' -d '{"status":"completed","result":"Agent completed"}' 2>/dev/null || true`
+    : '';
+
   let command: string;
 
   if (platform === 'windows') {
-    // PowerShell reads file and passes to copilot
-    command = `$p = Get-Content '${promptFile}' -Raw; copilot -p $p --yolo${modelFlag}`;
+    command = `$p = Get-Content '${promptFile}' -Raw; copilot -p $p --yolo${modelFlag}${bridgeNotify}`;
   } else {
-    command = `copilot -p "$(cat '${promptFile}')" --yolo${modelFlag}`;
+    command = `copilot -p "$(cat '${promptFile}')" --yolo${modelFlag}${bridgeNotify}`;
   }
 
   await spawnTab({

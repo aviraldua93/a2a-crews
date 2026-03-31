@@ -317,6 +317,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
         cwd: process.cwd(),
         model: agent.model,
         bridgeUrl,
+        taskId: bridgeTaskIds.get(task.id),
       });
     }
 
