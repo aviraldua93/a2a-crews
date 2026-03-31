@@ -21,12 +21,16 @@ export async function spawnTab(options: SpawnOptions): Promise<void> {
 
   switch (platform) {
     case 'windows': {
-      // Use child_process.spawn for reliable wt.exe invocation
+      // Write a launcher script to avoid argument splitting in wt.exe
+      const launcherFile = `${options.cwd}/.a2a-crews-launch-${options.title.replace(/[^a-zA-Z0-9-]/g, '_')}.ps1`;
+      const cwd = options.cwd.replace(/\//g, '\\');
+      const script = `Set-Location '${cwd}'\n${options.command}`;
+      await Bun.write(launcherFile, script);
+
       const wtPath = `${process.env.LOCALAPPDATA}\\Microsoft\\WindowsApps\\wt.exe`;
       spawn(wtPath, [
         '-w', '0', 'new-tab', '--title', options.title,
-        'pwsh', '-NoExit', '-Command',
-        `Set-Location '${options.cwd}'; ${options.command}`
+        'pwsh', '-NoExit', '-File', launcherFile.replace(/\//g, '\\')
       ], { detached: true, stdio: 'ignore' }).unref();
       break;
     }
@@ -53,13 +57,13 @@ export async function spawnAgent(config: {
   model?: string;
   bridgeUrl: string;
 }): Promise<void> {
+  const platform = detectPlatform();
   const modelFlag = config.model ? ` --model "${config.model}"` : '';
 
   // Write prompt to temp file to avoid quoting issues
-  const promptFile = `${config.cwd}/.a2a-crews-prompt-${config.name}.txt`;
+  const promptFile = `${config.cwd}/.a2a-crews-prompt-${config.name}.txt`.replace(/\//g, platform === 'windows' ? '\\' : '/');
   await Bun.write(promptFile, config.prompt);
 
-  const platform = detectPlatform();
   let command: string;
 
   if (platform === 'windows') {
