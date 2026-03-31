@@ -23,7 +23,7 @@ export function printTasks(tasks: { id: string; title: string; assignedTo: strin
   console.log();
 }
 
-export function printSummary(totalTime: number, waves: number, tasksCompleted: number, totalTasks: number): void {
+export function printSummary(totalTime: number, waves: number, tasksCompleted: number, totalTasks: number, retries: number = 0, failedTasks: number = 0): void {
   const min = Math.floor(totalTime / 60);
   const sec = Math.round(totalTime % 60);
   console.log(`  ╔${'═'.repeat(46)}╗`);
@@ -32,5 +32,7 @@ export function printSummary(totalTime: number, waves: number, tasksCompleted: n
   console.log(`  Total time: ${min}m ${sec}s`);
   console.log(`  Waves: ${waves}`);
   console.log(`  Tasks: ${tasksCompleted}/${totalTasks}`);
+  console.log(`  Retries: ${retries}`);
+  console.log(`  Failed tasks: ${failedTasks}`);
   console.log();
 }

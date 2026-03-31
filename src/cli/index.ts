@@ -270,7 +270,14 @@ async function handleLaunch(teamName?: string): Promise<void> {
 
   const startTime = Date.now();
   let tasksCompleted = 0;
+  let totalRetries = 0;
+  let failedTasks = 0;
   const bridgeTaskIds: Map<string, string> = new Map(); // task.id -> bridge task UUID
+  const spawnAttempts: Map<string, number> = new Map(); // task.id -> attempt count
+  const taskSubmittedAt: Map<string, number> = new Map(); // task.id -> timestamp of last spawn
+
+  const MAX_RETRIES = 3;
+  const DEAD_AGENT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
   for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
     const wave = waves[waveIdx];
@@ -280,6 +287,22 @@ async function handleLaunch(teamName?: string): Promise<void> {
     for (const task of wave) {
       const agent = agentMap.get(task.assignedTo);
       if (!agent) continue;
+
+      // Check if task has exceeded max retries (poison pill)
+      const attempts = spawnAttempts.get(task.id) ?? 0;
+      if (attempts >= MAX_RETRIES) {
+        console.log(`    ☠️  ${task.id} — exceeded max retries, marking failed`);
+        const existingUuid = bridgeTaskIds.get(task.id);
+        if (existingUuid) {
+          await fetch(`${bridgeUrl}/tasks/${existingUuid}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'failed', result: 'Max retries exceeded' }),
+          });
+        }
+        failedTasks++;
+        continue;
+      }
 
       // Register agent on bridge (idempotent — re-registration overwrites)
       await fetch(`${bridgeUrl}/agents`, {
@@ -332,11 +355,13 @@ async function handleLaunch(teamName?: string): Promise<void> {
         bridgeUrl,
         taskId: bridgeTaskIds.get(task.id),
       });
+      spawnAttempts.set(task.id, (spawnAttempts.get(task.id) ?? 0) + 1);
+      taskSubmittedAt.set(task.id, Date.now());
     }
 
     // Poll bridge for wave completion (with evidence-based fallback)
     console.log(`    ⏳ Waiting for wave ${waveIdx + 1} to complete...`);
-    const waveTaskUuids = wave.map(t => bridgeTaskIds.get(t.id)!);
+    const waveTaskUuids: string[] = wave.map(t => bridgeTaskIds.get(t.id)!);
     let waveComplete = false;
     let elapsed = 0;
 
@@ -368,6 +393,86 @@ async function handleLaunch(teamName?: string): Promise<void> {
           continue;
         }
 
+        // Dead agent detection: task stuck in 'submitted' with no deliverable
+        if (body.status === 'submitted') {
+          const submittedTime = taskSubmittedAt.get(task.id) ?? startTime;
+          const stuckDuration = Date.now() - submittedTime;
+
+          if (stuckDuration > DEAD_AGENT_TIMEOUT_MS) {
+            const currentAttempts = spawnAttempts.get(task.id) ?? 0;
+
+            if (currentAttempts >= MAX_RETRIES) {
+              console.log(`    ☠️  ${task.id} — agent dead, max retries exhausted (${currentAttempts}/${MAX_RETRIES})`);
+              await fetch(`${bridgeUrl}/tasks/${uuid}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'failed', result: 'Max retries exceeded — agent unresponsive' }),
+              });
+              failedTasks++;
+              continue;
+            }
+
+            console.log(`    🔄 ${task.id} — agent appears dead, retrying (attempt ${currentAttempts + 1}/${MAX_RETRIES})`);
+
+            // Re-create task on bridge (old one is stale)
+            const retryTaskRes = await fetch(`${bridgeUrl}/tasks`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                assignedTo: task.assignedTo,
+                message: task.title,
+              }),
+            });
+            const retryTaskBody = await retryTaskRes.json() as { task: { id: string } };
+
+            // Cancel the old stale task
+            await fetch(`${bridgeUrl}/tasks/${uuid}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'canceled', result: 'Replaced by retry' }),
+            });
+
+            // Update tracking to new bridge UUID
+            bridgeTaskIds.set(task.id, retryTaskBody.task.id);
+            waveTaskUuids[i] = retryTaskBody.task.id;
+
+            // Re-spawn the agent
+            const agent = agentMap.get(task.assignedTo);
+            if (agent) {
+              const agentTasks = crewConfig.tasks
+                .filter(t => t.assignedTo === agent.key)
+                .map(t => new Task({
+                  id: t.id,
+                  title: t.title,
+                  assignedTo: t.assignedTo,
+                  dependsOn: t.dependsOn,
+                  acceptanceCriteria: t.acceptanceCriteria,
+                }));
+
+              const prompt = generateAgentPrompt({
+                agent,
+                tasks: agentTasks,
+                scenario: crewConfig.scenario,
+                bridgeUrl,
+                projectDir: process.cwd(),
+              });
+
+              await spawnAgent({
+                name: agent.key,
+                prompt,
+                cwd: process.cwd(),
+                model: agent.model,
+                bridgeUrl,
+                taskId: retryTaskBody.task.id,
+              });
+            }
+
+            spawnAttempts.set(task.id, currentAttempts + 1);
+            taskSubmittedAt.set(task.id, Date.now());
+            totalRetries++;
+          }
+        }
+
         allDone = false;
       }
 
@@ -388,7 +493,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
   }
 
   const totalTime = (Date.now() - startTime) / 1000;
-  printSummary(totalTime, waves.length, tasksCompleted, taskObjects.length);
+  printSummary(totalTime, waves.length, tasksCompleted, taskObjects.length, totalRetries, failedTasks);
 
   bridge.stop();
   process.exit(0);
