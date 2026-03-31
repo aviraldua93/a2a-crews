@@ -1,23 +1,46 @@
 {
   "name": "a2a-crews",
   "version": "0.1.0",
-  "author": "Aviral Dua",
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
+  "description": "Turn one command into a team of AI agents. Built on Google's A2A protocol.",
+  "type": "module",
+  "main": "src/cli/index.ts",
   "bin": {
-    "crews": "./src/cli/index.ts"
+    "crews": "src/cli/index.ts"
   },
-  "description": "Turn one CLI command into a team of AI agents coordinated via A2A protocol",
-  "keywords": ["a2a", "agent-to-agent", "multi-agent", "orchestration", "copilot", "cli"],
-  "license": "MIT",
   "scripts": {
     "dev": "bun run src/cli/index.ts",
     "test": "bun test",
     "build": "bun build src/cli/index.ts --compile --outfile=crews",
-    "lint": "bunx biome check src/"
+    "typecheck": "bun x tsc --noEmit"
   },
-  "type": "module",
+  "keywords": [
+    "a2a", "agent-to-agent", "multi-agent", "orchestration",
+    "copilot", "cli", "ai", "agents", "teams", "automation",
+    "google-a2a", "bun", "typescript"
+  ],
+  "author": "Aviral Dua",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aviraldua93/a2a-crews.git"
+  },
+  "homepage": "https://github.com/aviraldua93/a2a-crews",
+  "bugs": {
+    "url": "https://github.com/aviraldua93/a2a-crews/issues"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "src/",
+    "docs/",
+    "README.md",
+    "LICENSE",
+    "ROADMAP.md"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
   "dependencies": {
     "a2a-js": "^0.2.0"
   }

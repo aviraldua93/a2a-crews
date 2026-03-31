@@ -155,18 +155,31 @@ See [`PLAN.md`](PLAN.md) for the full build plan.
 
 ## Install
 
-**Prerequisites:** [Bun](https://bun.sh) v1.0+
-
+### Option A: Bun (recommended)
 ```bash
-# From source
+bun install -g a2a-crews
+```
+
+### Option B: From source
+```bash
 git clone https://github.com/aviraldua93/a2a-crews.git
 cd a2a-crews
 bun install
-bun run dev
-
-# Global install (once published)
-bun install -g a2a-crews
+bun run dev          # run directly
+bun run build        # compile binary
 ```
+
+### Option C: Compiled binary
+Download from [Releases](https://github.com/aviraldua93/a2a-crews/releases) or build:
+```bash
+bun run build
+./crews plan "Build a calculator"
+```
+
+### Requirements
+- [Bun](https://bun.sh) 1.0+
+- [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) (`copilot` command)
+- [Windows Terminal](https://aka.ms/terminal) (Windows) or `tmux` (macOS/Linux)
 
 ---
 
