@@ -1,4 +1,5 @@
 import { $ } from 'bun';
+import { spawn } from 'child_process';
 
 export type Platform = 'windows' | 'macos' | 'linux';
 
@@ -19,22 +20,29 @@ export async function spawnTab(options: SpawnOptions): Promise<void> {
   const platform = detectPlatform();
 
   switch (platform) {
-    case 'windows':
-      // Windows Terminal
-      await $`wt.exe -w 0 new-tab --title ${options.title} pwsh -Command "Set-Location '${options.cwd}'; ${options.command}"`.quiet();
+    case 'windows': {
+      // Use child_process.spawn for reliable wt.exe invocation
+      const wtPath = `${process.env.LOCALAPPDATA}\\Microsoft\\WindowsApps\\wt.exe`;
+      spawn(wtPath, [
+        '-w', '0', 'new-tab', '--title', options.title,
+        'pwsh', '-NoExit', '-Command',
+        `Set-Location '${options.cwd}'; ${options.command}`
+      ], { detached: true, stdio: 'ignore' }).unref();
       break;
+    }
 
     case 'macos':
-    case 'linux':
+    case 'linux': {
       // tmux (must be in a tmux session)
       const sessionExists = await $`tmux has-session 2>/dev/null`.quiet().then(() => true).catch(() => false);
       if (sessionExists) {
         await $`tmux new-window -n ${options.title} "cd ${options.cwd} && ${options.command}"`.quiet();
       } else {
         // Fallback: run in background
-        await $`cd ${options.cwd} && ${options.command} &`.quiet();
+        spawn('sh', ['-c', `cd '${options.cwd}' && ${options.command}`], { detached: true, stdio: 'ignore' }).unref();
       }
       break;
+    }
   }
 }
 
@@ -51,7 +59,15 @@ export async function spawnAgent(config: {
   const promptFile = `${config.cwd}/.a2a-crews-prompt-${config.name}.txt`;
   await Bun.write(promptFile, config.prompt);
 
-  const command = `copilot -p "$(cat '${promptFile}')" --yolo${modelFlag}`;
+  const platform = detectPlatform();
+  let command: string;
+
+  if (platform === 'windows') {
+    // PowerShell reads file and passes to copilot
+    command = `$p = Get-Content '${promptFile}' -Raw; copilot -p $p --yolo${modelFlag}`;
+  } else {
+    command = `copilot -p "$(cat '${promptFile}')" --yolo${modelFlag}`;
+  }
 
   await spawnTab({
     title: `${config.name} (a2a-crews)`,

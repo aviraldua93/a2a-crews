@@ -1,0 +1,24 @@
+{
+  "name": "a2a-crews",
+  "version": "0.1.0",
+  "author": "Aviral Dua",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "bin": {
+    "crews": "./src/cli/index.ts"
+  },
+  "description": "Turn one CLI command into a team of AI agents coordinated via A2A protocol",
+  "keywords": ["a2a", "agent-to-agent", "multi-agent", "orchestration", "copilot", "cli"],
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run src/cli/index.ts",
+    "test": "bun test",
+    "build": "bun build src/cli/index.ts --compile --outfile=crews",
+    "lint": "bunx biome check src/"
+  },
+  "type": "module",
+  "dependencies": {
+    "a2a-js": "^0.2.0"
+  }
+}
