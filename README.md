@@ -5,8 +5,8 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-runtime-f9f1e1.svg)](https://bun.sh)
-[![A2A Protocol](https://img.shields.io/badge/A2A-protocol-7C3AED.svg)](https://google.github.io/A2A/)
-[![Tests](https://img.shields.io/badge/tests-79%2B%20passing-brightgreen.svg)](tests/)
+[![A2A Protocol](https://img.shields.io/badge/A2A_v0.3-@a2a--js/sdk-7C3AED.svg)](https://a2aproject.org)
+[![Tests](https://img.shields.io/badge/tests-95%20passing-brightgreen.svg)](tests/)
 [![Version](https://img.shields.io/badge/version-0.2.0-green.svg)](package.json)
 
 > *"Build a classifier for search ranking"*
@@ -304,18 +304,75 @@ Verdicts: **GO** (>80% confidence) · **RISKY** (50-80%) · **NO-GO** (<50%, won
 ---
 
 <details>
-<summary><strong>Under the Hood</strong></summary>
+<summary><strong>Under the Hood — Real A2A Protocol</strong></summary>
 
-### A2A Bridge
+### A2A Protocol Implementation
 
-An embedded A2A-compliant server starts with your session. No Docker, no external infra.
+Built on the **official [`@a2a-js/sdk`](https://github.com/a2aproject/a2a-js)** (v0.3.13) from Google's A2A project. Not a toy wrapper — this implements the real spec.
 
-- `GET /.well-known/agent.json` — A2A agent card (discovery)
-- `POST /` — JSON-RPC 2.0 dispatch (task operations)
-- `GET /status` — Bridge health + registered agents
-- SSE streaming for real-time events
+**All types come from the SDK**: `AgentCard`, `Message`, `Task`, `Part`, `Artifact`, `TaskState`, `TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`.
 
-Any A2A-compatible client can connect. The bridge doesn't know or care what's behind each agent.
+#### JSON-RPC 2.0 Methods
+
+| Method | Description | Streaming |
+|--------|-------------|-----------|
+| `message/send` | Send a message, get a Task back | No |
+| `message/stream` | Send a message, get SSE task updates | ✅ SSE |
+| `tasks/get` | Retrieve task state + artifacts | No |
+| `tasks/list` | Query tasks with filters + pagination | No |
+| `tasks/cancel` | Cancel a running task | No |
+| `tasks/subscribe` | Subscribe to live task updates | ✅ SSE |
+
+```bash
+# Example: send a task via JSON-RPC
+curl -X POST http://localhost:8222/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "abc-123",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Build auth middleware"}]
+      }
+    }
+  }'
+
+# Response: {"jsonrpc":"2.0","id":1,"result":{"kind":"task","id":"...","status":{"state":"submitted"}}}
+```
+
+#### Agent Discovery
+
+```
+GET /.well-known/agent-card.json
+```
+
+Returns a spec-compliant `AgentCard` with `protocolVersion: "0.3.0"`, `defaultInputModes`, `defaultOutputModes`, `additionalInterfaces`, and skill `tags`.
+
+#### Streaming Events
+
+`message/stream` and `tasks/subscribe` return Server-Sent Events:
+
+```
+data: {"kind":"task","id":"...","status":{"state":"submitted"}}
+
+data: {"kind":"status-update","taskId":"...","status":{"state":"working"},"final":false}
+
+data: {"kind":"artifact-update","taskId":"...","artifact":{"artifactId":"result","parts":[{"kind":"text","text":"..."}]}}
+
+data: {"kind":"status-update","taskId":"...","status":{"state":"completed"},"final":true}
+```
+
+#### Production Hardening
+
+- **Rate limits**: Max 100K tasks, 1K agents, 100 SSE connections
+- **Memory safety**: Circular event log buffer (10K entries), text truncation (1MB)
+- **Resource cleanup**: SSE streams auto-close on client disconnect, terminal state, or 10min timeout
+- **Validation**: All inputs validated (types, array elements, string lengths, part counts)
+- **Error codes**: Standard JSON-RPC 2.0 codes with `TaskNotFoundError`, `TaskNotCancelableError` data types
 
 ### Wave Orchestration
 

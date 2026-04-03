@@ -53,6 +53,15 @@ type BridgeEventType =
   | 'task:completed'
   | 'task:failed';
 
+// ─── Limits ────────────────────────────────────────────────────────
+
+const MAX_TASKS = 100_000;
+const MAX_AGENTS = 1_000;
+const MAX_EVENT_LOG = 10_000;
+const MAX_SSE_CONNECTIONS = 100;
+const MAX_PARTS = 1_000;
+const MAX_TEXT_LENGTH = 1_000_000; // 1 MB
+
 // ─── Bridge ────────────────────────────────────────────────────────
 
 export class A2ABridge {
@@ -62,14 +71,20 @@ export class A2ABridge {
   private server: ReturnType<typeof Bun.serve> | null = null;
   private port: number;
   private eventLog: string[] = [];
+  private activeSSEConnections = 0;
 
   constructor(port: number = 8222) {
     this.port = port;
+    this.events.setMaxListeners(MAX_SSE_CONNECTIONS + 50);
   }
 
   private logEvent(type: string, taskId: string, agentName: string, detail: string): void {
     const entry = `${new Date().toISOString()}|${type}|${taskId}|${agentName}|${detail}`;
     this.eventLog.push(entry);
+    // Circular buffer — prevent unbounded growth
+    if (this.eventLog.length > MAX_EVENT_LOG) {
+      this.eventLog = this.eventLog.slice(-MAX_EVENT_LOG);
+    }
   }
 
   /** Start the bridge HTTP server. */
@@ -309,6 +324,11 @@ export class A2ABridge {
       return this.jsonErr('skills must be an array of strings');
     }
 
+    // Rate limit: prevent DoS via unlimited agent registration
+    if (!this.agents.has(name as string) && this.agents.size >= MAX_AGENTS) {
+      return this.jsonErr('Agent limit reached', 429);
+    }
+
     const now = new Date().toISOString();
     const agent: RegisteredAgent = {
       name,
@@ -396,6 +416,10 @@ export class A2ABridge {
 
     if (!this.agents.has(assignedTo)) {
       return this.jsonErr(`Unknown agent: ${assignedTo}`, 404);
+    }
+
+    if (this.tasks.size >= MAX_TASKS) {
+      return this.jsonErr('Task limit reached', 429);
     }
 
     const now = new Date().toISOString();
@@ -486,6 +510,11 @@ export class A2ABridge {
   // ── SSE ────────────────────────────────────────────────────────
 
   private handleSSE(req: Request): Response {
+    if (this.activeSSEConnections >= MAX_SSE_CONNECTIONS) {
+      return this.jsonErr('Too many SSE connections', 429);
+    }
+    this.activeSSEConnections++;
+
     const encoder = new TextEncoder();
     const bridge = this;
     const stream = new ReadableStream({
@@ -506,6 +535,7 @@ export class A2ABridge {
 
         req.signal.addEventListener('abort', () => {
           bridge.events.off('*', handler);
+          bridge.activeSSEConnections--;
           try {
             controller.close();
           } catch {
@@ -645,7 +675,7 @@ export class A2ABridge {
           results = results.filter(t => t.assignedTo === p.assignedTo);
         }
         // Pagination
-        const pageSize = typeof p.pageSize === 'number' ? Math.min(p.pageSize, 100) : 50;
+        const pageSize = typeof p.pageSize === 'number' ? Math.max(1, Math.min(p.pageSize, 100)) : 50;
         const pageToken = typeof p.pageToken === 'string' ? parseInt(p.pageToken, 10) : 0;
         const offset = isNaN(pageToken) ? 0 : pageToken;
         const page = results.slice(offset, offset + pageSize);
@@ -724,11 +754,31 @@ export class A2ABridge {
       );
     }
 
+    // Payload size limits
+    if (message.parts.length > MAX_PARTS) {
+      return Response.json(
+        { jsonrpc: '2.0', id: rpcId, error: { code: -32602, message: `Too many parts (max ${MAX_PARTS})` } },
+        { status: 400 },
+      );
+    }
+
+    if (this.tasks.size >= MAX_TASKS) {
+      return Response.json(
+        { jsonrpc: '2.0', id: rpcId, error: { code: -32603, message: 'Task limit reached' } },
+        { status: 429 },
+      );
+    }
+
     const parts = message.parts as Array<Record<string, unknown>>;
     const textPart = parts.find((p) => p.type === 'text' || p.kind === 'text');
-    const text = (textPart && typeof textPart.text === 'string')
+    let text = (textPart && typeof textPart.text === 'string')
       ? textPart.text
       : JSON.stringify(parts);
+
+    // Truncate excessively long messages
+    if (text.length > MAX_TEXT_LENGTH) {
+      text = text.slice(0, MAX_TEXT_LENGTH);
+    }
 
     const assignedTo =
       (p.metadata as Record<string, unknown>)?.assignedTo as string ??
