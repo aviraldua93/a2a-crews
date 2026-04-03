@@ -192,6 +192,9 @@ export class A2ABridge {
     if (!Array.isArray(skills)) {
       return this.jsonErr('Missing required field: skills (array)');
     }
+    if (!skills.every((s: unknown) => typeof s === 'string')) {
+      return this.jsonErr('skills must be an array of strings');
+    }
 
     const now = new Date().toISOString();
     const agent: RegisteredAgent = {
@@ -489,14 +492,14 @@ export class A2ABridge {
       case 'message/send': {
         const p = (params ?? {}) as Record<string, unknown>;
         const message = p.message as Record<string, unknown> | undefined;
-        const taskId = (p.id as string) ?? crypto.randomUUID();
+        const taskId = (typeof p.id === 'string' ? p.id : null) ?? crypto.randomUUID();
 
-        if (!message || !message.parts) {
+        if (!message || !Array.isArray(message.parts) || message.parts.length === 0) {
           return Response.json(
             {
               jsonrpc: '2.0',
               id,
-              error: { code: -32602, message: 'Missing message.parts in params' },
+              error: { code: -32602, message: 'Missing or invalid message.parts in params' },
             },
             { status: 400 },
           );
@@ -507,7 +510,9 @@ export class A2ABridge {
         const textPart = parts.find(
           (p) => p.type === 'text' || p.kind === 'text',
         );
-        const text = textPart ? (textPart.text as string) : JSON.stringify(parts);
+        const text = (textPart && typeof textPart.text === 'string')
+          ? textPart.text
+          : JSON.stringify(parts);
 
         // Resolve agent from metadata (request-level or message-level)
         const assignedTo =
@@ -546,14 +551,14 @@ export class A2ABridge {
 
       case 'tasks/get': {
         const p = (params ?? {}) as Record<string, unknown>;
-        const taskId = p.id as string;
+        const taskId = typeof p.id === 'string' ? p.id : undefined;
         const task = taskId ? this.tasks.get(taskId) : undefined;
         if (!task) {
           return Response.json(
             {
               jsonrpc: '2.0',
               id,
-              error: { code: -32001, message: `Task not found: ${taskId}` },
+              error: { code: -32602, message: `Task not found: ${taskId}`, data: { type: 'TaskNotFoundError' } },
             },
             { status: 404 },
           );
@@ -582,14 +587,14 @@ export class A2ABridge {
 
       case 'tasks/cancel': {
         const p = (params ?? {}) as Record<string, unknown>;
-        const taskId = p.id as string;
+        const taskId = typeof p.id === 'string' ? p.id : undefined;
         const task = taskId ? this.tasks.get(taskId) : undefined;
         if (!task) {
           return Response.json(
             {
               jsonrpc: '2.0',
               id,
-              error: { code: -32001, message: `Task not found: ${taskId}` },
+              error: { code: -32602, message: `Task not found: ${taskId}`, data: { type: 'TaskNotFoundError' } },
             },
             { status: 404 },
           );

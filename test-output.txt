@@ -1,0 +1,107 @@
+bun test v1.3.10 (30e609e0)
+
+tests\assessor.test.ts:
+(pass) assessFeasibility > greenfield project (no package.json) returns go [281.00ms]
+(pass) assessFeasibility > complex scenario with many keywords lowers confidence [281.00ms]
+(pass) assessFeasibility > security-sensitive scenario is flagged [266.00ms]
+(pass) assessFeasibility > vague scenario raises concern [281.00ms]
+(pass) assessFeasibility > large project simulation raises concerns about exploration time [1078.00ms]
+(pass) assessFeasibility > overall structure has all three assessors [110.00ms]
+(pass) assessFeasibility > project with many dependencies flags integration risk [297.00ms]
+
+tests\bridge.test.ts:
+≡ƒîë A2A Bridge running on http://localhost:60270
+(pass) GET /status > responds with bridge health [16.00ms]
+(pass) POST /agents > registers an agent
+(pass) POST /agents > rejects missing name
+(pass) POST /agents > rejects invalid JSON
+(pass) POST /agents/:name/heartbeat > updates heartbeat and status
+(pass) POST /agents/:name/heartbeat > returns 404 for unknown agent
+(pass) POST /tasks > creates a task for a registered agent
+(pass) POST /tasks > rejects task for unknown agent
+(pass) GET /tasks/:id > retrieves a created task
+(pass) GET /tasks/:id > returns 404 for unknown task
+(pass) PATCH /tasks/:id > updates task status and result
+(pass) PATCH /tasks/:id > rejects invalid status
+(pass) GET /tasks > lists all tasks
+(pass) GET /tasks > filters by status
+(pass) GET /tasks > filters by assignedTo
+(pass) Agent cards > GET /agents/:name/card returns card for registered agent [15.00ms]
+(pass) Agent cards > GET /.well-known/agent.json returns bridge card
+(pass) Agent cards > returns 404 for unknown agent card
+(pass) GET /events (SSE) > receives events when a task is created
+(pass) Unknown routes > returns 404 for unknown paths
+(pass) POST / (JSON-RPC) > tasks/send creates a task via JSON-RPC
+(pass) POST / (JSON-RPC) > tasks/get retrieves a task via JSON-RPC
+(pass) POST / (JSON-RPC) > rejects invalid JSON-RPC
+(pass) POST / (JSON-RPC) > returns method not found for unknown method
+(pass) Edge cases > task creation for unregistered agent fails
+
+tests\checkpoint-wal.test.ts:
+(pass) createCheckpoint > creates checkpoint with required fields and defaults [16.00ms]
+(pass) createCheckpoint > respects explicit overrides
+(pass) checkpointToString > serializes checkpoint to pretty JSON
+≡ƒîë A2A Bridge running on http://localhost:60275
+(pass) Event log entries > entries follow pipe-delimited WAL format
+≡ƒîë A2A Bridge running on http://localhost:60278
+(pass) Event log entries > heartbeat events are logged
+≡ƒîë A2A Bridge running on http://localhost:60281
+(pass) Event log entries > task update events are logged [16.00ms]
+
+tests\crew.test.ts:
+(pass) Task > creates pending task with no deps
+(pass) Task > creates blocked task with deps
+(pass) Task > can start when deps are met
+(pass) Task > cannot start when deps are not met
+(pass) computeWaves > computes waves for feature template
+(pass) computeWaves > handles parallel tasks
+(pass) computeWaves > detects deadlock
+(pass) Agent > creates agent with defaults
+(pass) Agent > generates agent card
+
+tests\planner.test.ts:
+(pass) composeFromTemplate > creates agents and tasks from feature template
+(pass) composeFromTemplate > creates agents from fullstack template with parallel tasks
+(pass) composeFromTemplate > works for all 13 templates
+(pass) findBestTemplate > matches feature scenarios
+(pass) findBestTemplate > matches bugfix scenarios
+(pass) findBestTemplate > matches data science scenarios
+(pass) findBestTemplate > matches audit scenarios
+(pass) findBestTemplate > returns null for unrecognized scenarios
+(pass) isPlanApproved > approves go
+(pass) isPlanApproved > approves risky
+(pass) isPlanApproved > rejects no-go
+(pass) planSummary > formats summary correctly
+(pass) isAIPlannerAvailable > returns a boolean [1046.00ms]
+
+tests\retry.test.ts:
+(pass) spawnAttempts tracking > initializes at 0 for unknown tasks
+(pass) spawnAttempts tracking > increments attempts on each spawn
+(pass) spawnAttempts tracking > tracks multiple tasks independently
+(pass) max retries (poison pill) > allows spawn when under max retries
+(pass) max retries (poison pill) > blocks spawn when at max retries
+(pass) max retries (poison pill) > blocks spawn when over max retries
+(pass) dead agent detection > does not flag tasks under timeout threshold
+(pass) dead agent detection > flags tasks over timeout threshold
+(pass) dead agent detection > flags tasks exactly at boundary
+(pass) dead agent detection > combines timeout + retry check correctly
+
+tests\review-loop.test.ts:
+(pass) review feedback loop > reviewer prompt includes feedback loop instructions
+(pass) review feedback loop > non-reviewer prompt does not include feedback loop
+
+tests\spawner.test.ts:
+(pass) detectPlatform > returns a valid platform
+(pass) generateAgentPrompt > generates prompt with role and tasks
+(pass) generateAgentPrompt > includes acceptance criteria in prompt
+(pass) generateAgentPrompt > shows dependencies in task list
+
+tests\templates.test.ts:
+(pass) templates > lists all 13 presets
+(pass) templates > loads feature preset with correct structure
+(pass) templates > every preset has valid roles and tasks
+
+ 79 pass
+ 0 fail
+ 358 expect() calls
+Ran 79 tests across 9 files. [4.28s]

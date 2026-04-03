@@ -576,4 +576,88 @@ describe('A2A spec compliance', () => {
     const body = await res.json();
     expect(body.result.kind).toBe('task');
   });
+
+  test('tasks/get returns TaskNotFoundError with proper error code', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 200,
+        method: 'tasks/get',
+        params: { id: 'nonexistent-task-id' },
+      }),
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe(-32602);
+    expect(body.error.data?.type).toBe('TaskNotFoundError');
+  });
+
+  test('rejects non-string skills in agent registration', async () => {
+    const res = await fetch(`${baseUrl}/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'bad-agent',
+        description: 'Has bad skills',
+        skills: [1, null, 'valid'],
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('strings');
+  });
+
+  test('rejects non-array message.parts in JSON-RPC', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 201,
+        method: 'message/send',
+        params: {
+          message: { kind: 'message', messageId: 'x', role: 'user', parts: 'not-an-array' },
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe(-32602);
+  });
+
+  test('handles non-text parts gracefully via JSON fallback', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 202,
+        method: 'tasks/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'data-msg',
+            role: 'user',
+            parts: [{ kind: 'data', data: { key: 'value' } }],
+          },
+          metadata: { assignedTo: 'architect' },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.result.kind).toBe('task');
+  });
+
+  test('event log endpoint returns entries', async () => {
+    const res = await fetch(`${baseUrl}/events/log`);
+    expect(res.status).toBe(200);
+    const log = await res.json();
+    expect(Array.isArray(log)).toBe(true);
+    expect(log.length).toBeGreaterThan(0);
+    // WAL entries are pipe-delimited
+    expect(log[0]).toContain('|');
+  });
 });
