@@ -1,30 +1,29 @@
 /**
- * Embedded A2A Bridge — lightweight HTTP coordination hub.
+ * Embedded A2A Bridge — Bun.serve coordination hub with @a2a-js/sdk types.
  *
- * Bun.serve based server implementing python-a2a route structure
- * with full A2A task lifecycle (submitted → working → completed/failed).
+ * Uses official SDK types (AgentCard, Message, Task, Part, Artifact, TaskState)
+ * for full A2A protocol compliance. Implements both:
+ *   1. **Standard A2A endpoints**: /.well-known/agent-card.json, POST / (JSON-RPC)
+ *   2. **Orchestration endpoints**: /agents, /tasks, /events, /status
+ *
+ * The bridge is both a spec-compliant A2A server AND a multi-agent orchestrator.
  */
 import { EventEmitter } from 'events';
-import { createAgentCard, type AgentCard, type AgentCardSkill } from './discovery';
+import type {
+  AgentCard,
+  AgentSkill,
+  Task as A2ATask,
+  Message as A2AMessage,
+  TaskState,
+  Artifact,
+  TaskStatusUpdateEvent,
+} from '@a2a-js/sdk';
+import { AGENT_CARD_PATH } from '@a2a-js/sdk';
+import { createAgentCard } from './discovery';
+import type { RegisteredAgent, BridgeTaskStatus } from './types';
 
-// ─── Domain types ──────────────────────────────────────────────────
-
-export interface RegisteredAgent {
-  name: string;
-  description: string;
-  skills: string[];
-  endpoint?: string;
-  status: 'online' | 'idle' | 'busy' | 'offline';
-  lastHeartbeat: string;
-  registeredAt: string;
-}
-
-export type BridgeTaskStatus =
-  | 'submitted'
-  | 'working'
-  | 'completed'
-  | 'failed'
-  | 'canceled';
+// Re-export for backward compatibility
+export type { RegisteredAgent, BridgeTaskStatus } from './types';
 
 export interface BridgeTask {
   id: string;
@@ -37,17 +36,14 @@ export interface BridgeTask {
 }
 
 // Event names emitted on every state change
-const EVENT_TYPES = [
-  'agent:registered',
-  'agent:heartbeat',
-  'agent:status',
-  'task:created',
-  'task:updated',
-  'task:completed',
-  'task:failed',
-] as const;
-
-type BridgeEventType = (typeof EVENT_TYPES)[number];
+type BridgeEventType =
+  | 'agent:registered'
+  | 'agent:heartbeat'
+  | 'agent:status'
+  | 'task:created'
+  | 'task:updated'
+  | 'task:completed'
+  | 'task:failed';
 
 // ─── Bridge ────────────────────────────────────────────────────────
 
@@ -75,7 +71,7 @@ export class A2ABridge {
       fetch: (req) => this.handleRequest(req),
     });
     // Bun may pick a different port if requested one is busy
-    this.port = this.server.port;
+    this.port = this.server.port ?? this.port;
     console.log(`🌉 A2A Bridge running on http://localhost:${this.port}`);
   }
 
@@ -96,7 +92,6 @@ export class A2ABridge {
   private emit(type: BridgeEventType, payload: Record<string, unknown>): void {
     const event = { type, timestamp: new Date().toISOString(), ...payload };
     this.events.emit(type, event);
-    // Wildcard channel used by SSE handler
     this.events.emit('*', event);
   }
 
@@ -106,10 +101,6 @@ export class A2ABridge {
 
   private jsonErr(message: string, status = 400): Response {
     return Response.json({ error: message }, { status });
-  }
-
-  private generateId(): string {
-    return crypto.randomUUID();
   }
 
   // ── router ───────────────────────────────────────────────────────
@@ -160,16 +151,18 @@ export class A2ABridge {
         return this.handleStatus();
       }
 
-      // ── Well-known agent card (bridge itself) ─────────────────
+      // ── Well-known agent card (A2A discovery) ─────────────────
       if (
         method === 'GET' &&
-        (path === '/.well-known/agent.json' || path === '/agent.json')
+        (path === `/${AGENT_CARD_PATH}` ||
+         path === '/.well-known/agent.json' ||
+         path === '/agent.json')
       ) {
         return this.handleBridgeCard();
       }
 
       // ── JSON-RPC dispatch (A2A standard) ──────────────────────
-      if (method === 'POST' && path === '/') {
+      if (method === 'POST' && (path === '/' || path === '/a2a')) {
         return this.handleJsonRpc(req);
       }
 
@@ -189,10 +182,7 @@ export class A2ABridge {
       return this.jsonErr('Invalid JSON body');
     }
 
-    const { name, description, skills, endpoint } = body as Record<
-      string,
-      unknown
-    >;
+    const { name, description, skills, endpoint } = body as Record<string, unknown>;
     if (!name || typeof name !== 'string') {
       return this.jsonErr('Missing required field: name');
     }
@@ -221,10 +211,7 @@ export class A2ABridge {
     return this.jsonOk({ ok: true, agent }, 201);
   }
 
-  private async handleHeartbeat(
-    name: string,
-    req: Request,
-  ): Promise<Response> {
+  private async handleHeartbeat(name: string, req: Request): Promise<Response> {
     const agent = this.agents.get(name);
     if (!agent) {
       return this.jsonErr(`Agent not found: ${name}`, 404);
@@ -256,10 +243,11 @@ export class A2ABridge {
       return this.jsonErr(`Agent not found: ${name}`, 404);
     }
 
-    const skills: AgentCardSkill[] = agent.skills.map((s) => ({
+    const skills: AgentSkill[] = agent.skills.map((s) => ({
       id: s,
       name: s,
       description: s,
+      tags: [s],
     }));
 
     const card: AgentCard = createAgentCard(
@@ -296,7 +284,7 @@ export class A2ABridge {
 
     const now = new Date().toISOString();
     const task: BridgeTask = {
-      id: this.generateId(),
+      id: crypto.randomUUID(),
       assignedTo,
       status: 'submitted',
       message,
@@ -319,10 +307,7 @@ export class A2ABridge {
     return this.jsonOk(task);
   }
 
-  private async handleUpdateTask(
-    id: string,
-    req: Request,
-  ): Promise<Response> {
+  private async handleUpdateTask(id: string, req: Request): Promise<Response> {
     const task = this.tasks.get(id);
     if (!task) {
       return this.jsonErr(`Task not found: ${id}`, 404);
@@ -338,11 +323,7 @@ export class A2ABridge {
     const { status, result } = body as Record<string, unknown>;
 
     const validStatuses: BridgeTaskStatus[] = [
-      'submitted',
-      'working',
-      'completed',
-      'failed',
-      'canceled',
+      'submitted', 'working', 'completed', 'failed', 'canceled',
     ];
     if (status !== undefined) {
       if (typeof status !== 'string' || !validStatuses.includes(status as BridgeTaskStatus)) {
@@ -393,7 +374,6 @@ export class A2ABridge {
     const bridge = this;
     const stream = new ReadableStream({
       start(controller) {
-        // Flush an SSE comment so the client's fetch() resolves immediately
         controller.enqueue(encoder.encode(':ok\n\n'));
 
         const handler = (event: unknown) => {
@@ -406,7 +386,6 @@ export class A2ABridge {
           }
         };
 
-        // Listen on the wildcard channel (all events go here)
         bridge.events.on('*', handler);
 
         req.signal.addEventListener('abort', () => {
@@ -468,6 +447,7 @@ export class A2ABridge {
           id: 'coordination',
           name: 'coordination',
           description: 'Multi-agent task coordination',
+          tags: ['coordination', 'orchestration'],
         },
       ],
       `http://localhost:${this.port}`,
@@ -476,8 +456,13 @@ export class A2ABridge {
     return this.jsonOk(card);
   }
 
-  // ── JSON-RPC dispatch ──────────────────────────────────────────
+  // ── JSON-RPC dispatch (A2A protocol) ───────────────────────────
 
+  /**
+   * Handles A2A JSON-RPC 2.0 requests at POST / and POST /a2a.
+   * Supports both legacy method names (tasks/send) and spec v0.3.0 names (message/send).
+   * Returns spec-compliant Task objects with kind:'task' discriminator.
+   */
   private async handleJsonRpc(req: Request): Promise<Response> {
     let body: unknown;
     try {
@@ -500,10 +485,11 @@ export class A2ABridge {
     }
 
     switch (method) {
-      case 'tasks/send': {
+      case 'tasks/send':
+      case 'message/send': {
         const p = (params ?? {}) as Record<string, unknown>;
         const message = p.message as Record<string, unknown> | undefined;
-        const taskId = (p.id as string) ?? this.generateId();
+        const taskId = (p.id as string) ?? crypto.randomUUID();
 
         if (!message || !message.parts) {
           return Response.json(
@@ -516,20 +502,25 @@ export class A2ABridge {
           );
         }
 
-        const textPart = (message.parts as Array<Record<string, unknown>>).find(
-          (p) => p.type === 'text',
+        // Support both 'type' (legacy) and 'kind' (v0.3.0) part discriminators
+        const parts = message.parts as Array<Record<string, unknown>>;
+        const textPart = parts.find(
+          (p) => p.type === 'text' || p.kind === 'text',
         );
-        const text = textPart ? (textPart.text as string) : JSON.stringify(message.parts);
+        const text = textPart ? (textPart.text as string) : JSON.stringify(parts);
 
-        // Pick first available agent or use metadata.assignedTo
+        // Resolve agent from metadata (request-level or message-level)
         const assignedTo =
           (p.metadata as Record<string, unknown>)?.assignedTo as string ??
+          (message.metadata as Record<string, unknown>)?.assignedTo as string ??
           (this.agents.size > 0 ? this.agents.keys().next().value : undefined);
 
         const now = new Date().toISOString();
+        const contextId = (message.contextId as string) ?? taskId;
+
         const task: BridgeTask = {
           id: taskId,
-          assignedTo: assignedTo ?? 'unassigned',
+          assignedTo: (assignedTo as string) ?? 'unassigned',
           status: 'submitted',
           message: text,
           createdAt: now,
@@ -540,12 +531,15 @@ export class A2ABridge {
         this.logEvent('task_created', task.id, task.assignedTo, task.message);
         this.emit('task:created', { taskId: task.id, assignedTo: task.assignedTo });
 
+        // Return A2A spec-compliant Task object
         return Response.json({
           jsonrpc: '2.0',
           id,
           result: {
+            kind: 'task',
             id: task.id,
-            status: { state: task.status, timestamp: now },
+            contextId,
+            status: { state: task.status as TaskState, timestamp: now },
           },
         });
       }
@@ -564,15 +558,24 @@ export class A2ABridge {
             { status: 404 },
           );
         }
+
+        // Build spec-compliant artifacts array
+        const artifacts: Artifact[] = task.result
+          ? [{
+              artifactId: 'result',
+              parts: [{ kind: 'text' as const, text: task.result }],
+            }]
+          : [];
+
         return Response.json({
           jsonrpc: '2.0',
           id,
           result: {
+            kind: 'task',
             id: task.id,
-            status: { state: task.status, timestamp: task.updatedAt },
-            artifacts: task.result
-              ? [{ parts: [{ type: 'text', text: task.result }] }]
-              : [],
+            contextId: task.id,
+            status: { state: task.status as TaskState, timestamp: task.updatedAt },
+            artifacts,
           },
         });
       }
@@ -600,8 +603,10 @@ export class A2ABridge {
           jsonrpc: '2.0',
           id,
           result: {
+            kind: 'task',
             id: task.id,
-            status: { state: task.status, timestamp: task.updatedAt },
+            contextId: task.id,
+            status: { state: task.status as TaskState, timestamp: task.updatedAt },
           },
         });
       }

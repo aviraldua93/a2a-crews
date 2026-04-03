@@ -252,7 +252,7 @@ describe('Agent cards', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.name).toBe('architect');
-    expect(body.protocolVersion).toBe('1.0.0');
+    expect(body.protocolVersion).toBe('0.3.0');
     expect(body.capabilities.streaming).toBe(true);
     expect(body.skills.length).toBeGreaterThan(0);
   });
@@ -434,5 +434,146 @@ describe('Edge cases', () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toContain('phantom');
+  });
+});
+
+// ── 13. A2A spec compliance ─────────────────────────────────────────
+
+describe('A2A spec compliance', () => {
+  test('GET /.well-known/agent-card.json returns spec-compliant card', async () => {
+    const res = await fetch(`${baseUrl}/.well-known/agent-card.json`);
+    expect(res.status).toBe(200);
+    const card = await res.json();
+    // Required fields per A2A spec
+    expect(card.name).toBe('a2a-bridge');
+    expect(card.description).toBeDefined();
+    expect(card.protocolVersion).toBe('0.3.0');
+    expect(card.version).toBeDefined();
+    expect(card.url).toBeDefined();
+    expect(card.capabilities).toBeDefined();
+    expect(card.skills).toBeInstanceOf(Array);
+    expect(card.skills.length).toBeGreaterThan(0);
+    // New fields from A2A v0.3.0
+    expect(card.defaultInputModes).toEqual(['text']);
+    expect(card.defaultOutputModes).toEqual(['text']);
+    expect(card.additionalInterfaces).toBeInstanceOf(Array);
+    expect(card.additionalInterfaces[0].transport).toBe('JSONRPC');
+  });
+
+  test('JSON-RPC response includes kind:task discriminator', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 100,
+        method: 'tasks/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'test-1',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Test with kind discriminator' }],
+          },
+          metadata: { assignedTo: 'architect' },
+        },
+      }),
+    });
+    const body = await res.json();
+    expect(body.result.kind).toBe('task');
+    expect(body.result.contextId).toBeDefined();
+    expect(body.result.status.state).toBe('submitted');
+  });
+
+  test('message/send works as alias for tasks/send', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 101,
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'test-2',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Via message/send' }],
+          },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.result.kind).toBe('task');
+    expect(body.result.id).toBeDefined();
+  });
+
+  test('tasks/get returns artifacts in spec format', async () => {
+    // Create a task and mark it completed with result
+    const createRes = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedTo: 'architect', message: 'artifact test' }),
+    });
+    const { task } = await createRes.json();
+
+    await fetch(`${baseUrl}/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed', result: 'Test artifact content' }),
+    });
+
+    // Get via JSON-RPC
+    const rpcRes = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 102,
+        method: 'tasks/get',
+        params: { id: task.id },
+      }),
+    });
+    const body = await rpcRes.json();
+    expect(body.result.kind).toBe('task');
+    expect(body.result.artifacts).toBeInstanceOf(Array);
+    expect(body.result.artifacts.length).toBe(1);
+    expect(body.result.artifacts[0].artifactId).toBe('result');
+    expect(body.result.artifacts[0].parts[0].kind).toBe('text');
+    expect(body.result.artifacts[0].parts[0].text).toBe('Test artifact content');
+  });
+
+  test('agent card skills have required tags field', async () => {
+    const res = await fetch(`${baseUrl}/agents/architect/card`);
+    const card = await res.json();
+    for (const skill of card.skills) {
+      expect(skill.tags).toBeInstanceOf(Array);
+      expect(skill.tags.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('POST /a2a handles JSON-RPC', async () => {
+    const res = await fetch(`${baseUrl}/a2a`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 103,
+        method: 'tasks/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'a2a-test',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Via /a2a endpoint' }],
+          },
+          metadata: { assignedTo: 'architect' },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.result.kind).toBe('task');
   });
 });

@@ -32,6 +32,7 @@ export class Agent {
         id: s,
         name: s,
         description: `Skill: ${s}`,
+        tags: [s],
       })),
     };
   }

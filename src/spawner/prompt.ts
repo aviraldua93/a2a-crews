@@ -59,6 +59,9 @@ If you find blocking or medium-severity issues:
    
    Invoke-RestMethod -Uri '${ctx.bridgeUrl}/tasks/{TASK_ID}' -Method PATCH -ContentType 'application/json' -Body '{"status":"completed","result":"Task completed successfully"}'
    
+   Or use the A2A JSON-RPC endpoint:
+   Invoke-RestMethod -Uri '${ctx.bridgeUrl}/' -Method POST -ContentType 'application/json' -Body '{"jsonrpc":"2.0","id":1,"method":"tasks/send","params":{"message":{"kind":"message","messageId":"done","role":"agent","parts":[{"kind":"text","text":"completed"}]}}}'
+   
    Replace {TASK_ID} with the actual task ID from YOUR TASKS above.
    The task IDs are: ${ctx.tasks.map(t => t.id).join(', ')}
 
