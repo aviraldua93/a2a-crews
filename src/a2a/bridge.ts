@@ -129,6 +129,16 @@ export class A2ABridge {
   private createTaskStream(taskId: string, initialResult?: Record<string, unknown>): Response {
     const encoder = new TextEncoder();
     const bridge = this;
+    const TERMINAL_STATES = ['completed', 'failed', 'canceled'];
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let handler: ((event: Record<string, unknown>) => void) | null = null;
+
+    const cleanup = (controller?: ReadableStreamDefaultController) => {
+      if (timeout) { clearTimeout(timeout); timeout = null; }
+      if (handler) { bridge.events.off('*', handler); handler = null; }
+      try { controller?.close(); } catch { /* already closed */ }
+    };
+
     const stream = new ReadableStream({
       start(controller) {
         // Send initial task state
@@ -137,32 +147,28 @@ export class A2ABridge {
         }
 
         const task = bridge.tasks.get(taskId);
-        if (task && ['completed', 'failed', 'canceled'].includes(task.status)) {
-          // Already terminal — close immediately
+        if (task && TERMINAL_STATES.includes(task.status)) {
           controller.close();
           return;
         }
 
-        const handler = (event: Record<string, unknown>) => {
-          const eventTaskId = event.taskId as string;
-          if (eventTaskId !== taskId) return;
+        handler = (event: Record<string, unknown>) => {
+          if ((event.taskId as string) !== taskId) return;
 
           try {
             const currentTask = bridge.tasks.get(taskId);
             if (!currentTask) return;
 
-            // Emit spec-compliant status-update event
             const update = {
               kind: 'status-update',
               taskId,
               contextId: taskId,
               status: { state: currentTask.status, timestamp: currentTask.updatedAt },
-              final: ['completed', 'failed', 'canceled'].includes(currentTask.status),
+              final: TERMINAL_STATES.includes(currentTask.status),
             };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(update)}\n\n`));
 
-            // If task has a result, emit artifact-update
-            if (currentTask.result && ['completed'].includes(currentTask.status)) {
+            if (currentTask.result && currentTask.status === 'completed') {
               const artifactUpdate = {
                 kind: 'artifact-update',
                 taskId,
@@ -175,28 +181,29 @@ export class A2ABridge {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(artifactUpdate)}\n\n`));
             }
 
-            // Close stream on terminal state
-            if (['completed', 'failed', 'canceled'].includes(currentTask.status)) {
-              bridge.events.off('*', handler);
-              try { controller.close(); } catch { /* already closed */ }
+            if (TERMINAL_STATES.includes(currentTask.status)) {
+              cleanup(controller);
             }
           } catch {
-            // stream may be closed
+            // stream may be closed by client
           }
         };
 
         bridge.events.on('*', handler);
 
-        // Cleanup on abort
-        if (typeof AbortSignal !== 'undefined') {
-          // Timeout: close after 10 minutes if task never completes
-          const timeout = setTimeout(() => {
-            bridge.events.off('*', handler);
-            try { controller.close(); } catch { /* already closed */ }
-          }, 10 * 60 * 1000);
+        // Safety timeout: 10 minutes max
+        timeout = setTimeout(() => cleanup(controller), 10 * 60 * 1000);
 
-          // Note: cleanup on client disconnect happens via stream cancellation
+        // Re-check after registration to close the race window
+        const recheck = bridge.tasks.get(taskId);
+        if (recheck && TERMINAL_STATES.includes(recheck.status)) {
+          cleanup(controller);
         }
+      },
+
+      cancel() {
+        // Called when client disconnects — clean up handler + timeout
+        cleanup();
       },
     });
 
