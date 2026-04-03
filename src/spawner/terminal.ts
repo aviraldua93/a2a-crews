@@ -65,11 +65,11 @@ export async function spawnAgent(config: {
   const promptFile = `${config.cwd}/.a2a-crews-prompt-${config.name}.txt`.replace(/\//g, platform === 'windows' ? '\\' : '/');
   await Bun.write(promptFile, config.prompt);
 
-  // Build post-completion bridge notification
+  // Build post-completion bridge notification (JSON-RPC primary, REST fallback)
   const bridgeNotify = config.taskId && config.bridgeUrl
     ? platform === 'windows'
-      ? `; try { Invoke-RestMethod -Uri '${config.bridgeUrl}/tasks/${config.taskId}' -Method PATCH -ContentType 'application/json' -Body '{"status":"completed","result":"Agent completed"}' -ErrorAction SilentlyContinue } catch {}`
-      : `; curl -s -X PATCH '${config.bridgeUrl}/tasks/${config.taskId}' -H 'Content-Type: application/json' -d '{"status":"completed","result":"Agent completed"}' 2>/dev/null || true`
+      ? `; try { Invoke-RestMethod -Uri '${config.bridgeUrl}/a2a' -Method POST -ContentType 'application/json' -Body '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","messageId":"${config.taskId}-exit","role":"agent","parts":[{"kind":"text","text":"Agent completed"}],"metadata":{"taskId":"${config.taskId}","status":"completed"}}}}' -ErrorAction SilentlyContinue; Invoke-RestMethod -Uri '${config.bridgeUrl}/tasks/${config.taskId}' -Method PATCH -ContentType 'application/json' -Body '{"status":"completed","result":"Agent completed"}' -ErrorAction SilentlyContinue } catch {}`
+      : `; curl -s -X POST '${config.bridgeUrl}/a2a' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","messageId":"${config.taskId}-exit","role":"agent","parts":[{"kind":"text","text":"Agent completed"}],"metadata":{"taskId":"${config.taskId}","status":"completed"}}}}' 2>/dev/null; curl -s -X PATCH '${config.bridgeUrl}/tasks/${config.taskId}' -H 'Content-Type: application/json' -d '{"status":"completed","result":"Agent completed"}' 2>/dev/null || true`
     : '';
 
   let command: string;

@@ -54,16 +54,15 @@ If you find blocking or medium-severity issues:
    - When ready, do the work thoroughly. Spawn sub-agents for exploration.
    - Write your deliverable to artifacts/${ctx.tasks[0]?.id ?? 'output'}.md
 
-4. CRITICAL — After completing EACH task, report to the bridge:
-   Run this PowerShell command (or equivalent curl):
-   
-   Invoke-RestMethod -Uri '${ctx.bridgeUrl}/tasks/{TASK_ID}' -Method PATCH -ContentType 'application/json' -Body '{"status":"completed","result":"Task completed successfully"}'
-   
-   Or use the A2A JSON-RPC endpoint:
-   Invoke-RestMethod -Uri '${ctx.bridgeUrl}/' -Method POST -ContentType 'application/json' -Body '{"jsonrpc":"2.0","id":1,"method":"tasks/send","params":{"message":{"kind":"message","messageId":"done","role":"agent","parts":[{"kind":"text","text":"completed"}]}}}'
+4. CRITICAL — After completing EACH task, report to the bridge via A2A JSON-RPC:
+
+   Invoke-RestMethod -Uri '${ctx.bridgeUrl}/a2a' -Method POST -ContentType 'application/json' -Body '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","messageId":"{TASK_ID}-done","role":"agent","parts":[{"kind":"text","text":"Task completed successfully"}],"metadata":{"taskId":"{TASK_ID}","status":"completed"}}}}'
    
    Replace {TASK_ID} with the actual task ID from YOUR TASKS above.
    The task IDs are: ${ctx.tasks.map(t => t.id).join(', ')}
+   
+   ALSO update the task status directly (ensures bridge tracking works):
+   Invoke-RestMethod -Uri '${ctx.bridgeUrl}/tasks/{TASK_ID}' -Method PATCH -ContentType 'application/json' -Body '{"status":"completed","result":"Task completed successfully"}'
 
 5. Be thorough. Tokens are not a concern. Quality is.
 6. When all tasks are complete, exit.

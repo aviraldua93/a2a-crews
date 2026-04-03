@@ -1,3 +1,5 @@
+import type { AgentCard, AgentSkill } from '@a2a-js/sdk';
+
 export interface AgentConfig {
   key: string;
   name: string;
@@ -24,16 +26,28 @@ export class Agent {
     this.allowedTools = config.allowedTools ?? ['view', 'glob', 'grep', 'explore', 'edit', 'create', 'powershell'];
   }
 
-  toAgentCard() {
+  /** Build a spec-compliant A2A AgentCard for this agent. */
+  toAgentCard(url?: string): AgentCard {
+    const skills: AgentSkill[] = this.skills.map(s => ({
+      id: s,
+      name: s,
+      description: `Skill: ${s}`,
+      tags: [s],
+    }));
+
     return {
       name: this.name,
       description: this.description,
-      skills: this.skills.map(s => ({
-        id: s,
-        name: s,
-        description: `Skill: ${s}`,
-        tags: [s],
-      })),
+      url: url ?? `http://localhost:8222/agents/${this.key}`,
+      version: '0.2.0',
+      protocolVersion: '0.3.0',
+      capabilities: { streaming: true, pushNotifications: false },
+      defaultInputModes: ['text'],
+      defaultOutputModes: ['text'],
+      additionalInterfaces: [
+        { url: url ?? `http://localhost:8222/agents/${this.key}`, transport: 'JSONRPC' },
+      ],
+      skills,
     };
   }
 }

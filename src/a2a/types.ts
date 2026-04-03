@@ -34,9 +34,6 @@ export type {
 
 export { AGENT_CARD_PATH } from '@a2a-js/sdk';
 
-// ─── Client components (runtime-safe on Bun) ────────────────────────
-export { ClientFactory, ClientFactoryOptions } from '@a2a-js/sdk/client';
-
 // ─── Bridge-specific types ──────────────────────────────────────────
 
 /** Agent registered on the bridge with heartbeat tracking. */
