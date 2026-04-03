@@ -6,6 +6,14 @@
  *   1. **Standard A2A endpoints**: /.well-known/agent-card.json, POST / (JSON-RPC)
  *   2. **Orchestration endpoints**: /agents, /tasks, /events, /status
  *
+ * JSON-RPC methods implemented:
+ *   - message/send (tasks/send)  — create a task
+ *   - message/stream             — create a task + SSE stream updates
+ *   - tasks/get                  — retrieve task state
+ *   - tasks/list                 — query tasks with filters
+ *   - tasks/cancel               — cancel a running task
+ *   - tasks/subscribe            — SSE stream for existing task updates
+ *
  * The bridge is both a spec-compliant A2A server AND a multi-agent orchestrator.
  */
 import { EventEmitter } from 'events';
@@ -101,6 +109,104 @@ export class A2ABridge {
 
   private jsonErr(message: string, status = 400): Response {
     return Response.json({ error: message }, { status });
+  }
+
+  /** Convert internal BridgeTask to A2A spec-compliant Task object. */
+  private toA2ATask(task: BridgeTask): Record<string, unknown> {
+    const artifacts: Artifact[] = task.result
+      ? [{ artifactId: 'result', parts: [{ kind: 'text' as const, text: task.result }] }]
+      : [];
+    return {
+      kind: 'task',
+      id: task.id,
+      contextId: task.id,
+      status: { state: task.status as TaskState, timestamp: task.updatedAt },
+      artifacts,
+    };
+  }
+
+  /** Create an SSE stream that follows a task until it reaches a terminal state. */
+  private createTaskStream(taskId: string, initialResult?: Record<string, unknown>): Response {
+    const encoder = new TextEncoder();
+    const bridge = this;
+    const stream = new ReadableStream({
+      start(controller) {
+        // Send initial task state
+        if (initialResult) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialResult)}\n\n`));
+        }
+
+        const task = bridge.tasks.get(taskId);
+        if (task && ['completed', 'failed', 'canceled'].includes(task.status)) {
+          // Already terminal — close immediately
+          controller.close();
+          return;
+        }
+
+        const handler = (event: Record<string, unknown>) => {
+          const eventTaskId = event.taskId as string;
+          if (eventTaskId !== taskId) return;
+
+          try {
+            const currentTask = bridge.tasks.get(taskId);
+            if (!currentTask) return;
+
+            // Emit spec-compliant status-update event
+            const update = {
+              kind: 'status-update',
+              taskId,
+              contextId: taskId,
+              status: { state: currentTask.status, timestamp: currentTask.updatedAt },
+              final: ['completed', 'failed', 'canceled'].includes(currentTask.status),
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(update)}\n\n`));
+
+            // If task has a result, emit artifact-update
+            if (currentTask.result && ['completed'].includes(currentTask.status)) {
+              const artifactUpdate = {
+                kind: 'artifact-update',
+                taskId,
+                contextId: taskId,
+                artifact: {
+                  artifactId: 'result',
+                  parts: [{ kind: 'text', text: currentTask.result }],
+                },
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(artifactUpdate)}\n\n`));
+            }
+
+            // Close stream on terminal state
+            if (['completed', 'failed', 'canceled'].includes(currentTask.status)) {
+              bridge.events.off('*', handler);
+              try { controller.close(); } catch { /* already closed */ }
+            }
+          } catch {
+            // stream may be closed
+          }
+        };
+
+        bridge.events.on('*', handler);
+
+        // Cleanup on abort
+        if (typeof AbortSignal !== 'undefined') {
+          // Timeout: close after 10 minutes if task never completes
+          const timeout = setTimeout(() => {
+            bridge.events.off('*', handler);
+            try { controller.close(); } catch { /* already closed */ }
+          }, 10 * 60 * 1000);
+
+          // Note: cleanup on client disconnect happens via stream cancellation
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
   }
 
   // ── router ───────────────────────────────────────────────────────
@@ -490,63 +596,16 @@ export class A2ABridge {
     switch (method) {
       case 'tasks/send':
       case 'message/send': {
-        const p = (params ?? {}) as Record<string, unknown>;
-        const message = p.message as Record<string, unknown> | undefined;
-        const taskId = (typeof p.id === 'string' ? p.id : null) ?? crypto.randomUUID();
+        const task = this.createTaskFromRpc(id, params);
+        if (task instanceof Response) return task; // validation error
+        return Response.json({ jsonrpc: '2.0', id, result: this.toA2ATask(task) });
+      }
 
-        if (!message || !Array.isArray(message.parts) || message.parts.length === 0) {
-          return Response.json(
-            {
-              jsonrpc: '2.0',
-              id,
-              error: { code: -32602, message: 'Missing or invalid message.parts in params' },
-            },
-            { status: 400 },
-          );
-        }
-
-        // Support both 'type' (legacy) and 'kind' (v0.3.0) part discriminators
-        const parts = message.parts as Array<Record<string, unknown>>;
-        const textPart = parts.find(
-          (p) => p.type === 'text' || p.kind === 'text',
-        );
-        const text = (textPart && typeof textPart.text === 'string')
-          ? textPart.text
-          : JSON.stringify(parts);
-
-        // Resolve agent from metadata (request-level or message-level)
-        const assignedTo =
-          (p.metadata as Record<string, unknown>)?.assignedTo as string ??
-          (message.metadata as Record<string, unknown>)?.assignedTo as string ??
-          (this.agents.size > 0 ? this.agents.keys().next().value : undefined);
-
-        const now = new Date().toISOString();
-        const contextId = (message.contextId as string) ?? taskId;
-
-        const task: BridgeTask = {
-          id: taskId,
-          assignedTo: (assignedTo as string) ?? 'unassigned',
-          status: 'submitted',
-          message: text,
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        this.tasks.set(task.id, task);
-        this.logEvent('task_created', task.id, task.assignedTo, task.message);
-        this.emit('task:created', { taskId: task.id, assignedTo: task.assignedTo });
-
-        // Return A2A spec-compliant Task object
-        return Response.json({
-          jsonrpc: '2.0',
-          id,
-          result: {
-            kind: 'task',
-            id: task.id,
-            contextId,
-            status: { state: task.status as TaskState, timestamp: now },
-          },
-        });
+      case 'message/stream':
+      case 'tasks/sendSubscribe': {
+        const task = this.createTaskFromRpc(id, params);
+        if (task instanceof Response) return task; // validation error
+        return this.createTaskStream(task.id, this.toA2ATask(task));
       }
 
       case 'tasks/get': {
@@ -555,32 +614,44 @@ export class A2ABridge {
         const task = taskId ? this.tasks.get(taskId) : undefined;
         if (!task) {
           return Response.json(
-            {
-              jsonrpc: '2.0',
-              id,
-              error: { code: -32602, message: `Task not found: ${taskId}`, data: { type: 'TaskNotFoundError' } },
-            },
+            { jsonrpc: '2.0', id, error: { code: -32602, message: `Task not found: ${taskId}`, data: { type: 'TaskNotFoundError' } } },
             { status: 404 },
           );
         }
+        return Response.json({ jsonrpc: '2.0', id, result: this.toA2ATask(task) });
+      }
 
-        // Build spec-compliant artifacts array
-        const artifacts: Artifact[] = task.result
-          ? [{
-              artifactId: 'result',
-              parts: [{ kind: 'text' as const, text: task.result }],
-            }]
-          : [];
+      case 'tasks/list': {
+        const p = (params ?? {}) as Record<string, unknown>;
+        let results = Array.from(this.tasks.values());
+
+        // Filter by contextId
+        if (typeof p.contextId === 'string') {
+          results = results.filter(t => t.id === p.contextId);
+        }
+        // Filter by status
+        if (typeof p.status === 'string') {
+          results = results.filter(t => t.status === p.status);
+        }
+        // Filter by assignedTo (extension)
+        if (typeof p.assignedTo === 'string') {
+          results = results.filter(t => t.assignedTo === p.assignedTo);
+        }
+        // Pagination
+        const pageSize = typeof p.pageSize === 'number' ? Math.min(p.pageSize, 100) : 50;
+        const pageToken = typeof p.pageToken === 'string' ? parseInt(p.pageToken, 10) : 0;
+        const offset = isNaN(pageToken) ? 0 : pageToken;
+        const page = results.slice(offset, offset + pageSize);
+        const nextPageToken = offset + pageSize < results.length ? String(offset + pageSize) : '';
 
         return Response.json({
           jsonrpc: '2.0',
           id,
           result: {
-            kind: 'task',
-            id: task.id,
-            contextId: task.id,
-            status: { state: task.status as TaskState, timestamp: task.updatedAt },
-            artifacts,
+            tasks: page.map(t => this.toA2ATask(t)),
+            nextPageToken,
+            pageSize,
+            totalSize: results.length,
           },
         });
       }
@@ -591,40 +662,86 @@ export class A2ABridge {
         const task = taskId ? this.tasks.get(taskId) : undefined;
         if (!task) {
           return Response.json(
-            {
-              jsonrpc: '2.0',
-              id,
-              error: { code: -32602, message: `Task not found: ${taskId}`, data: { type: 'TaskNotFoundError' } },
-            },
+            { jsonrpc: '2.0', id, error: { code: -32602, message: `Task not found: ${taskId}`, data: { type: 'TaskNotFoundError' } } },
             { status: 404 },
+          );
+        }
+        if (['completed', 'failed', 'canceled'].includes(task.status)) {
+          return Response.json(
+            { jsonrpc: '2.0', id, error: { code: -32602, message: `Task not cancelable: ${taskId}`, data: { type: 'TaskNotCancelableError' } } },
+            { status: 400 },
           );
         }
         task.status = 'canceled';
         task.updatedAt = new Date().toISOString();
         this.logEvent('task_updated', task.id, task.assignedTo, 'canceled');
         this.emit('task:updated', { taskId: task.id, status: 'canceled' });
+        return Response.json({ jsonrpc: '2.0', id, result: this.toA2ATask(task) });
+      }
 
-        return Response.json({
-          jsonrpc: '2.0',
-          id,
-          result: {
-            kind: 'task',
-            id: task.id,
-            contextId: task.id,
-            status: { state: task.status as TaskState, timestamp: task.updatedAt },
-          },
-        });
+      case 'tasks/subscribe':
+      case 'tasks/resubscribe': {
+        const p = (params ?? {}) as Record<string, unknown>;
+        const taskId = typeof p.id === 'string' ? p.id : undefined;
+        const task = taskId ? this.tasks.get(taskId) : undefined;
+        if (!task) {
+          return Response.json(
+            { jsonrpc: '2.0', id, error: { code: -32602, message: `Task not found: ${taskId}`, data: { type: 'TaskNotFoundError' } } },
+            { status: 404 },
+          );
+        }
+        return this.createTaskStream(task.id, this.toA2ATask(task));
       }
 
       default:
         return Response.json(
-          {
-            jsonrpc: '2.0',
-            id,
-            error: { code: -32601, message: `Method not found: ${method}` },
-          },
+          { jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } },
           { status: 400 },
         );
     }
+  }
+
+  /**
+   * Extract and validate a task from JSON-RPC params.
+   * Returns a BridgeTask on success, or a Response on validation error.
+   */
+  private createTaskFromRpc(rpcId: unknown, params: unknown): BridgeTask | Response {
+    const p = (params ?? {}) as Record<string, unknown>;
+    const message = p.message as Record<string, unknown> | undefined;
+    const taskId = (typeof p.id === 'string' ? p.id : null) ?? crypto.randomUUID();
+
+    if (!message || !Array.isArray(message.parts) || message.parts.length === 0) {
+      return Response.json(
+        { jsonrpc: '2.0', id: rpcId, error: { code: -32602, message: 'Missing or invalid message.parts in params' } },
+        { status: 400 },
+      );
+    }
+
+    const parts = message.parts as Array<Record<string, unknown>>;
+    const textPart = parts.find((p) => p.type === 'text' || p.kind === 'text');
+    const text = (textPart && typeof textPart.text === 'string')
+      ? textPart.text
+      : JSON.stringify(parts);
+
+    const assignedTo =
+      (p.metadata as Record<string, unknown>)?.assignedTo as string ??
+      (message.metadata as Record<string, unknown>)?.assignedTo as string ??
+      (this.agents.size > 0 ? this.agents.keys().next().value : undefined);
+
+    const now = new Date().toISOString();
+    const task: BridgeTask = {
+      id: taskId,
+      assignedTo: (assignedTo as string) ?? 'unassigned',
+      status: 'submitted',
+      message: text,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.tasks.set(task.id, task);
+    this.logEvent('task_created', task.id, task.assignedTo, task.message);
+    this.emit('task:created', { taskId: task.id, assignedTo: task.assignedTo });
+
+    return task;
   }
 }

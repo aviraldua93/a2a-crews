@@ -660,4 +660,150 @@ describe('A2A spec compliance', () => {
     // WAL entries are pipe-delimited
     expect(log[0]).toContain('|');
   });
+
+  test('tasks/list returns all tasks with pagination', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 300,
+        method: 'tasks/list',
+        params: { pageSize: 5 },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.result.tasks).toBeInstanceOf(Array);
+    expect(body.result.tasks.length).toBeGreaterThan(0);
+    expect(body.result.totalSize).toBeGreaterThan(0);
+    expect(typeof body.result.pageSize).toBe('number');
+    for (const task of body.result.tasks) {
+      expect(task.kind).toBe('task');
+      expect(task.status.state).toBeDefined();
+    }
+  });
+
+  test('tasks/list filters by status', async () => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 301,
+        method: 'tasks/list',
+        params: { status: 'completed' },
+      }),
+    });
+    const body = await res.json();
+    for (const task of body.result.tasks) {
+      expect(task.status.state).toBe('completed');
+    }
+  });
+
+  test('tasks/cancel returns TaskNotCancelableError for completed task', async () => {
+    const createRes = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedTo: 'architect', message: 'cancel test' }),
+    });
+    const { task } = await createRes.json();
+    await fetch(`${baseUrl}/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed', result: 'done' }),
+    });
+
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 302,
+        method: 'tasks/cancel',
+        params: { id: task.id },
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.data?.type).toBe('TaskNotCancelableError');
+  });
+
+  test('message/stream returns SSE stream', async () => {
+    const controller = new AbortController();
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 303,
+        method: 'message/stream',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'stream-test',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Stream me' }],
+          },
+          metadata: { assignedTo: 'architect' },
+        },
+      }),
+      signal: controller.signal,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/event-stream');
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    const { value } = await reader.read();
+    const text = decoder.decode(value);
+    expect(text).toContain('"kind":"task"');
+    expect(text).toContain('"submitted"');
+
+    controller.abort();
+    reader.cancel().catch(() => {});
+  });
+
+  test('tasks/subscribe returns SSE stream for existing task', async () => {
+    const createRes = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 304,
+        method: 'message/send',
+        params: {
+          message: { kind: 'message', messageId: 'sub-test', role: 'user', parts: [{ kind: 'text', text: 'Subscribe' }] },
+          metadata: { assignedTo: 'architect' },
+        },
+      }),
+    });
+    const { result } = await createRes.json();
+    const taskId = result.id;
+
+    const controller = new AbortController();
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 305,
+        method: 'tasks/subscribe',
+        params: { id: taskId },
+      }),
+      signal: controller.signal,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/event-stream');
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    const { value } = await reader.read();
+    const text = decoder.decode(value);
+    expect(text).toContain(taskId);
+    expect(text).toContain('"kind":"task"');
+
+    controller.abort();
+    reader.cancel().catch(() => {});
+  });
 });
