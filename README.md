@@ -47,14 +47,14 @@ That's not a template. The AI planner **read the codebase**, understood it's an 
 
 |  | a2a-crews | CrewAI | LangGraph | AutoGen |
 |--|-----------|--------|-----------|---------|
-| **Reads your codebase first** | ✅ Auto-discovers domain | ❌ Manual setup | ❌ Manual setup | ❌ Manual setup |
-| **AI designs the team** | ✅ Domain-aware roles | ❌ You pick roles | ❌ You build graph | ❌ You configure |
-| **Feasibility scored** | ✅ Risk + confidence | ❌ | ❌ | ❌ |
-| **A2A protocol native** | ✅ Official SDK | ❌ Custom | ❌ Custom | ❌ Custom |
+| **AI planner reads codebase** | ✅ Via Copilot CLI | ❌ | ❌ | ❌ |
+| **Auto-generates team from task** | ✅ Or use 13 presets | ⚠️ You define roles | ⚠️ You build graph | ⚠️ You configure |
+| **Pre-flight feasibility gate** | ✅ Heuristic scoring | ❌ | ❌ | ❌ |
+| **A2A protocol (SDK types)** | ✅ `@a2a-js/sdk` | ❌ | ❌ | ❌ |
 | **Parallel wave execution** | ✅ DAG scheduling | ✅ | ✅ | ✅ |
 | **Auto-retry + recovery** | ✅ Evidence-based | ⚠️ Basic | ❌ | ❌ |
 
-**The difference:** Other tools make you design the team manually. a2a-crews reads your project, understands the domain, catches risks before you spend tokens, and builds a team that actually fits the problem.
+**The difference:** You describe the task. a2a-crews spawns an AI planner (via Copilot CLI) that explores your repo, understands the domain, and designs a team with feasibility checks — before spending tokens on execution.
 
 ---
 
@@ -161,15 +161,17 @@ graph LR
 
 ---
 
-## Proven Results
+## What Gets Built
 
-These ran fully autonomously — no human intervention after `crews launch`.
+Example scenarios the planner handles — from simple presets to AI-generated custom teams:
 
-| Project | Delivered | Outcome |
-|---------|-----------|---------|
-| **Calculator** | Arithmetic engine with edge cases | 45 tests passing |
-| **Fullstack Dashboard** | Express API + HTML frontend | Working E2E |
-| **ML Classifier** | ONNX model + pipeline + eval harness + A/B plan | Full ML pipeline |
+| Scenario | Team generated | Execution |
+|----------|---------------|-----------|
+| `"Build a calculator"` | 3 roles (preset: feature) | 3 sequential waves |
+| `"Build a fullstack dashboard"` | 4 roles (preset: fullstack) | Parallel backend + frontend |
+| `"Build a search ranking classifier"` | 4 custom AI-generated roles | 4 waves, feasibility warnings |
+
+The framework handles planning, spawning, coordination, and retry. Your agents do the coding.
 
 ---
 
