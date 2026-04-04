@@ -1,278 +1,101 @@
 # a2a-crews
 
-**Tell an AI what to build. It designs the team, assigns the work, and delivers working code.**
+### One command. AI designs the team. Agents write the code.
 
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://www.typescriptlang.org/)
-[![Bun](https://img.shields.io/badge/Bun-runtime-f9f1e1.svg)](https://bun.sh)
 [![A2A Protocol](https://img.shields.io/badge/A2A_v0.3-@a2a--js/sdk-7C3AED.svg)](https://a2aproject.org)
-[![Tests](https://img.shields.io/badge/tests-95%20passing-brightgreen.svg)](tests/)
-[![Version](https://img.shields.io/badge/version-0.2.0-green.svg)](package.json)
-
-> *"Build a classifier for search ranking"*
-
-The AI planner explores your codebase, identifies it's an ML problem, and designs this team:
+[![Tests](https://img.shields.io/badge/tests-119_passing-brightgreen.svg)](tests/)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  AI PLANNER OUTPUT                                              │
-├─────────────────────────────────────────────────────────────────┤
-│  Template:  AI-generated (not from presets)                     │
-│  Verdict:   ⚠️  RISKY — 60% confidence                         │
-│                                                                 │
-│  Concerns:                                                      │
-│  • Position bias in training data may skew rankings             │
-│  • No existing evaluation harness — need to build from scratch  │
-│  • Feature engineering requires domain expertise in search      │
-│                                                                 │
-│  Team:                                                          │
-│  ┌──────────────────┐  ┌──────────────────┐                     │
-│  │ 🔧 Data Engineer │  │ 📊 Ranking       │                     │
-│  │ Feature pipeline │  │    Modeler       │                     │
-│  │ + data profiling │  │ ONNX export +    │                     │
-│  └────────┬─────────┘  │ hyperparameter   │                     │
-│           │            │ search           │                     │
-│           ▼            └────────┬─────────┘                     │
-│  ┌──────────────────┐          │                                │
-│  │ 🔌 API           │          │                                │
-│  │    Integrator    │◄─────────┘                                │
-│  │ Serving endpoint │                                           │
-│  └────────┬─────────┘                                           │
-│           │                                                     │
-│           ▼                                                     │
-│  ┌──────────────────┐                                           │
-│  │ 📈 Evaluator     │                                           │
-│  │ NDCG, MRR, A/B   │                                           │
-│  │ test plan        │                                           │
-│  └──────────────────┘                                           │
-│                                                                 │
-│  Waves:                                                         │
-│  Wave 0: data-engineer (profile data, build feature pipeline)   │
-│  Wave 1: ranking-modeler (train model, export ONNX)             │
-│  Wave 2: api-integrator (serving endpoint + integration)        │
-│  Wave 3: evaluator (NDCG/MRR metrics, A/B test plan)           │
-└─────────────────────────────────────────────────────────────────┘
+$ crews plan "Build a search ranking classifier"
+
+  ╔══════════════════════════════════════════════╗
+  ║  PLANNING                                    ║
+  ╚══════════════════════════════════════════════╝
+
+  ⚠️  RISKY (60%) — 4 roles, 4 tasks
+
+  Concerns:
+    • Position bias in training data may skew rankings
+    • No existing evaluation harness — need to build from scratch
+
+  ROLES
+    data-engineer:    Feature pipeline + data profiling
+    ranking-modeler:  ONNX model + hyperparameter search
+    api-integrator:   Serving endpoint + integration
+    evaluator:        NDCG/MRR metrics + A/B test plan
+
+  TASKS
+    ⏳ profile-data     → data-engineer   [pending]
+    ⏳ train-model      → ranking-modeler  [pending]  (← profile-data)
+    ⏳ build-endpoint   → api-integrator   [pending]  (← train-model)
+    ⏳ evaluate          → evaluator        [pending]  (← build-endpoint)
+
+  ✅ Plan written. Run `crews apply` to create the team.
 ```
 
-That's not a template. The AI planner read the codebase, understood the domain, and created four ML-specific roles with real concerns about position bias. No other tool does this.
+That's not a template. The AI planner **read the codebase**, understood it's an ML problem, invented four domain-specific roles, and flagged position bias as a real risk. No other tool does this.
 
 ---
 
-## See It Work
+## Why a2a-crews?
 
-Three real scenarios. Watch the planner adapt.
-
-<table>
-<tr>
-<th>Calculator</th>
-<th>ML Classifier</th>
-<th>Fullstack Dashboard</th>
-</tr>
-<tr>
-<td>
-
-```
-crews plan "Build a calculator"
-```
-
-```
-Template:  feature (preset)
-Verdict:   ✅ GO — 85%
-Roles:     3
-
-🏗️ Architect
-  └→ design
-💻 Coder
-  └→ implement
-🔍 Reviewer
-  └→ review
-
-Waves:
-  0: design
-  1: implement
-  2: review
-```
-
-</td>
-<td>
-
-```
-crews plan "Build a classifier
-  for search ranking"
-```
-
-```
-Template:  AI-generated
-Verdict:   ⚠️ RISKY — 60%
-Roles:     4
-
-🔧 Data Engineer
-  └→ feature pipeline
-📊 Ranking Modeler
-  └→ ONNX model
-🔌 API Integrator
-  └→ serving endpoint
-📈 Evaluator
-  └→ NDCG + A/B plan
-
-Concerns:
-• Position bias in data
-• No eval harness exists
-• Needs search domain
-  expertise
-```
-
-</td>
-<td>
-
-```
-crews plan "Build a fullstack
-  dashboard"
-```
-
-```
-Template:  fullstack (preset)
-Verdict:   ✅ GO — 85%
-Roles:     4
-
-🏗️ Architect
-  └→ API contract + UI spec
-⚙️ Backend
-  └→ Express endpoints
-🎨 Frontend
-  └→ HTML + styling
-🔍 Reviewer
-  └→ full-stack review
-
-Waves:
-  0: design
-  1: backend, frontend ║
-  2: review
-```
-
-</td>
-</tr>
-</table>
-
-The calculator gets a 3-agent preset. The dashboard gets parallel backend + frontend. The classifier? The AI planner invents domain-specific roles, flags position bias as a risk, and plans an evaluation harness. **Same tool. Different intelligence for each problem.**
-
----
-
-## Proven Results
-
-These ran autonomously — `crews plan` → `crews apply` → `crews launch` → working code.
-
-| Project | What was delivered | Tests |
-|---------|-------------------|-------|
-| **Calculator** | Full arithmetic engine with edge cases | 45 tests passing |
-| **Fullstack Dashboard** | Express API + HTML frontend, end-to-end | Working app |
-| **ML Ranking Classifier** | ONNX model + feature pipeline + evaluation harness + A/B test plan | Full ML pipeline |
-
-Not demos. Not mockups. Working code with tests, built by autonomous agents.
+|  | a2a-crews | CrewAI | LangGraph | AutoGen |
+|--|-----------|--------|-----------|---------|
+| **Reads your codebase first** | ✅ Auto-discovers domain | ❌ Manual setup | ❌ Manual setup | ❌ Manual setup |
+| **AI designs the team** | ✅ Domain-aware roles | ❌ You pick roles | ❌ You build graph | ❌ You configure |
+| **Feasibility scored** | ✅ Risk + confidence | ❌ | ❌ | ❌ |
+| **A2A protocol native** | ✅ Official SDK | ❌ Custom | ❌ Custom | ❌ Custom |
+| **Parallel wave execution** | ✅ DAG scheduling | ✅ | ✅ | ✅ |
+| **Auto-retry + recovery** | ✅ Evidence-based | ⚠️ Basic | ❌ | ❌ |
 
 ---
 
 ## Quick Start
 
 ```bash
-# Install
 bun install -g a2a-crews
 
-# Plan → Approve → Launch (that's it)
 crews plan "Build a REST API with auth and tests"
 crews apply
 crews launch
 ```
 
-Your agents spawn in parallel terminal tabs, coordinate via A2A protocol, and deliver working code. Watch them with `crews watch`.
+Agents spawn in parallel terminal tabs, coordinate via [A2A protocol](https://a2aproject.org), and deliver working code. Watch with `crews watch`. Stop with `crews stop`.
 
 ---
 
-## How It Works
+## See It Adapt
 
-```mermaid
-graph LR
-    subgraph Input
-        scenario["📝 'Build X'"]
-    end
+The same tool. Different intelligence for each problem.
 
-    subgraph Plan["crews plan"]
-        assess["Assess feasibility"]
-        compose["Compose team"]
-    end
+**Simple task → preset template:**
+```
+$ crews plan "Build a calculator"
 
-    subgraph Bridge["A2A Bridge (localhost)"]
-        rpc["JSON-RPC 2.0"]
-        sse["SSE streaming"]
-        registry["Agent Registry"]
-    end
-
-    subgraph Agents["Spawned Agents"]
-        a1["🏗️ Agent 1"]
-        a2["💻 Agent 2"]
-        a3["🔍 Agent 3"]
-        a4["🧪 Agent 4"]
-    end
-
-    subgraph Output
-        code["📦 Working Code"]
-    end
-
-    scenario --> assess
-    assess --> compose
-    compose --> |"crews apply"| Bridge
-    Bridge --> |"crews launch"| Agents
-    a1 <--> |"A2A"| rpc
-    a2 <--> |"A2A"| rpc
-    a3 <--> |"A2A"| rpc
-    a4 <--> |"A2A"| rpc
-    Agents --> code
+  ✅ GO (85%) — feature template
+  🏗️ Architect → 💻 Coder → 🔍 Reviewer
+  Waves: design → implement → review
 ```
 
-1. **`crews plan`** — Describe what you want. The AI planner (or a preset template) assesses feasibility and composes a team.
-2. **`crews apply`** — Review the plan: agents, tasks, wave order. Approve or tweak.
-3. **`crews launch`** — Agents spawn in terminal tabs. Each registers with the embedded A2A bridge.
-4. **Agents execute** — Tasks flow through waves (design → implement → review). Agents communicate via A2A JSON-RPC. Status streams via SSE.
-5. **`crews watch`** / **`crews stop`** — Monitor progress or cancel.
+**Complex task → AI-generated team:**
+```
+$ crews plan "Build a fullstack dashboard with real-time updates"
 
----
+  ✅ GO (85%) — fullstack template
+  🏗️ Architect → ⚙️ Backend ║ 🎨 Frontend → 🔍 Reviewer
+  Waves: design → backend + frontend (parallel!) → review
+```
 
-## 13 Templates
+**Ambiguous task → AI planner invents roles + flags risks:**
+```
+$ crews plan "Build a classifier for search ranking"
 
-Preset team compositions for common workflows. Or let the AI planner create a custom team.
-
-### Engineering
-
-| Template | Roles | Flow |
-|----------|-------|------|
-| `feature` | Architect → Coder → Reviewer | Design → Implement → Review |
-| `fullstack` | Architect → Backend → Frontend → Reviewer | API contract → Parallel impl → Review |
-| `bugfix` | Investigator → Fixer → Reviewer | Reproduce → Fix → Verify |
-| `refactor` | Explorer → Coder → Tester → Reviewer | Audit → Refactor → Test → Validate |
-| `harness` | Planner → Generator → Evaluator | Plan → Generate → Evaluate (iterative) |
-
-### Data Science
-
-| Template | Roles | Flow |
-|----------|-------|------|
-| `data-science` | Data Engineer → Modeler → Evaluator → Reporter | Profile → Train → Evaluate → Report |
-| `ml-experiment` | Experimenter ×3 → Synthesizer | 3 parallel approaches → Pick winner |
-| `data-pipeline` | Extractor → Transformer → Loader → Validator | Extract → Transform → Load → Validate |
-
-### Operations
-
-| Template | Roles | Flow |
-|----------|-------|------|
-| `audit` | Security → Perf → Quality → Synthesizer | 3 parallel audits → Synthesize |
-| `ship` | Release Manager → QA → Reviewer | Build → Test → Ship |
-| `sprint` | PM → Architect → Coder → QA → Reviewer | Plan → Design → Build → Test → Review |
-| `research` | Researcher ×3 → Synthesizer | 3 parallel investigations → Synthesize |
-
-### Documentation
-
-| Template | Roles | Flow |
-|----------|-------|------|
-| `doc-review` | Accuracy → Completeness → Audience → Platform → Synthesizer | 4 parallel reviews → Synthesize |
+  ⚠️ RISKY (60%) — AI-generated, 4 custom roles
+  🔧 Data Engineer → 📊 Ranking Modeler → 🔌 API Integrator → 📈 Evaluator
+  Concerns: position bias, no eval harness, needs domain expertise
+```
 
 ---
 
@@ -280,26 +103,66 @@ Preset team compositions for common workflows. Or let the AI planner create a cu
 
 This is what makes a2a-crews different. When no template fits, the AI planner takes over.
 
-**It doesn't match keywords. It thinks.**
+1. **Explores your codebase** — reads file tree, package.json, source files, README
+2. **Understands the domain** — ML vs API vs frontend vs infrastructure
+3. **Creates custom roles** — not "architect/coder/reviewer" but "data-engineer/ranking-modeler/evaluator"
+4. **Assesses feasibility** — flags real concerns with confidence scores
 
-1. **Explores your codebase** — reads your file tree, package.json, source files, README
-2. **Understands the domain** — identifies ML vs API vs frontend vs infrastructure
-3. **Creates custom roles** — not "architect/coder/reviewer" but "data-engineer/ranking-modeler/evaluator" with task-specific skills
-4. **Assesses feasibility** — flags real concerns (position bias, missing test harnesses, security-sensitive scope) with confidence scores
-
-The planner is constrained: max 5 roles, max 3 tasks per role. It designs tight, focused teams — not sprawling bureaucracies.
-
-### Feasibility Assessment
-
-Every plan gets a three-factor assessment before a single token is spent:
+Every plan gets a three-factor gate **before a single token is spent**:
 
 | Factor | What it checks |
 |--------|---------------|
-| **Technical** | Package manager config, dependency count (>50 flagged), ESM setup, complexity keywords |
-| **Scope** | Scenario size, codebase scale (>100 files), feature splitting risk ("and" clause detection) |
-| **Risk** | Test directory existence, git repo (rollback safety), security-sensitive keywords (auth, payment, secrets) |
+| **Technical** | Dependencies, ESM config, complexity keywords |
+| **Scope** | Scenario size, codebase scale, feature splitting risk |
+| **Risk** | Test coverage, git safety, security-sensitive keywords |
 
-Verdicts: **GO** (>80% confidence) · **RISKY** (50-80%) · **NO-GO** (<50%, won't proceed)
+Verdicts: **GO** (>80%) · **RISKY** (50-80%) · **NO-GO** (<50%, won't proceed)
+
+---
+
+## 13 Templates
+
+Preset team compositions. Or let the AI planner create a custom team.
+
+| Category | Templates |
+|----------|-----------|
+| **Engineering** | `feature` · `fullstack` · `bugfix` · `refactor` · `harness` |
+| **Data Science** | `data-science` · `ml-experiment` · `data-pipeline` |
+| **Operations** | `audit` · `ship` · `sprint` · `research` |
+| **Docs** | `doc-review` |
+
+---
+
+## How It Works
+
+```mermaid
+graph LR
+    A["📝 Describe task"] --> B["🔍 AI plans team"]
+    B --> C["🌉 A2A Bridge"]
+    C --> D["⚙️ Agent 1"]
+    C --> E["⚙️ Agent 2"]
+    C --> F["⚙️ Agent 3"]
+    D --> G["📦 Working Code"]
+    E --> G
+    F --> G
+```
+
+1. **`crews plan`** — Describe what you want. AI assesses feasibility and composes a team.
+2. **`crews apply`** — Review the plan. Approve or tweak.
+3. **`crews launch`** — Agents spawn in terminal tabs, register with the A2A bridge, execute in waves.
+4. **`crews watch`** — Stream status via SSE. `crews stop` to cancel.
+
+---
+
+## Proven Results
+
+These ran fully autonomously — no human intervention after `crews launch`.
+
+| Project | Delivered | Outcome |
+|---------|-----------|---------|
+| **Calculator** | Arithmetic engine with edge cases | 45 tests passing |
+| **Fullstack Dashboard** | Express API + HTML frontend | Working E2E |
+| **ML Classifier** | ONNX model + pipeline + eval harness + A/B plan | Full ML pipeline |
 
 ---
 
@@ -308,172 +171,81 @@ Verdicts: **GO** (>80% confidence) · **RISKY** (50-80%) · **NO-GO** (<50%, won
 
 ### A2A Protocol Implementation
 
-Built on the **official [`@a2a-js/sdk`](https://github.com/a2aproject/a2a-js)** (v0.3.13) from Google's A2A project. Not a toy wrapper — this implements the real spec.
+Built on the **official [`@a2a-js/sdk`](https://github.com/a2aproject/a2a-js)** (v0.3.13) from Google's A2A project.
 
-**All types come from the SDK**: `AgentCard`, `Message`, `Task`, `Part`, `Artifact`, `TaskState`, `TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`.
+All types come from the SDK: `AgentCard`, `Message`, `Task`, `Part`, `Artifact`, `TaskState`.
 
-#### JSON-RPC 2.0 Methods
+#### JSON-RPC Methods
 
 | Method | Description | Streaming |
 |--------|-------------|-----------|
 | `message/send` | Send a message, get a Task back | No |
-| `message/stream` | Send a message, get SSE task updates | ✅ SSE |
+| `message/stream` | Send + SSE task updates | ✅ |
 | `tasks/get` | Retrieve task state + artifacts | No |
 | `tasks/list` | Query tasks with filters + pagination | No |
 | `tasks/cancel` | Cancel a running task | No |
-| `tasks/subscribe` | Subscribe to live task updates | ✅ SSE |
-
-```bash
-# Example: send a task via JSON-RPC
-curl -X POST http://localhost:8222/a2a \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "message/send",
-    "params": {
-      "message": {
-        "kind": "message",
-        "messageId": "abc-123",
-        "role": "user",
-        "parts": [{"kind": "text", "text": "Build auth middleware"}]
-      }
-    }
-  }'
-
-# Response: {"jsonrpc":"2.0","id":1,"result":{"kind":"task","id":"...","status":{"state":"submitted"}}}
-```
+| `tasks/subscribe` | Subscribe to live task updates | ✅ |
 
 #### Agent Discovery
 
 ```
 GET /.well-known/agent-card.json
-```
-
-Returns a spec-compliant `AgentCard` with `protocolVersion: "0.3.0"`, `defaultInputModes`, `defaultOutputModes`, `additionalInterfaces`, and skill `tags`.
-
-#### Streaming Events
-
-`message/stream` and `tasks/subscribe` return Server-Sent Events:
-
-```
-data: {"kind":"task","id":"...","status":{"state":"submitted"}}
-
-data: {"kind":"status-update","taskId":"...","status":{"state":"working"},"final":false}
-
-data: {"kind":"artifact-update","taskId":"...","artifact":{"artifactId":"result","parts":[{"kind":"text","text":"..."}]}}
-
-data: {"kind":"status-update","taskId":"...","status":{"state":"completed"},"final":true}
+→ AgentCard { protocolVersion: "0.3.0", skills, capabilities, ... }
 ```
 
 #### Production Hardening
 
-- **Rate limits**: Max 100K tasks, 1K agents, 100 SSE connections
-- **Memory safety**: Circular event log buffer (10K entries), text truncation (1MB)
-- **Resource cleanup**: SSE streams auto-close on client disconnect, terminal state, or 10min timeout
-- **Validation**: All inputs validated (types, array elements, string lengths, part counts)
-- **Error codes**: Standard JSON-RPC 2.0 codes with `TaskNotFoundError`, `TaskNotCancelableError` data types
+Rate limits (100K tasks, 1K agents, 100 SSE) · Circular event log (10K) · Text truncation (1MB) · SSE auto-close on disconnect · Input validation · Standard JSON-RPC error codes
 
-### Wave Orchestration
+</details>
 
-Tasks execute in dependency-ordered waves:
+<details>
+<summary><strong>Architecture Decisions</strong></summary>
 
-```
-Wave 0: [design]              — no dependencies
-Wave 1: [backend, frontend]   — both depend on design, run in parallel
-Wave 2: [review]              — depends on both Wave 1 tasks
-```
+Every design choice is backed by research. 10 ADRs in [`docs/architecture-decisions.md`](docs/architecture-decisions.md).
 
-Deadlock detection catches circular dependencies before launch.
-
-### Auto-Retry & Recovery
-
-- **Evidence-based recovery** — if an agent dies, the system detects deliverable files already written and credits that work
-- **Post-exit bridge notification** — agents report completion even after terminal close
-- **Context checkpoints** — long-running agents save progress for handoff
-
-### Agent Communication
-
-Each agent gets:
-- A generated prompt with tasks, acceptance criteria, and allowed tools
-- The A2A bridge URL for status reporting
-- Review feedback loop instructions (reviewers create fix tasks for blocking issues)
-
-Agents publish A2A agent cards, making them discoverable by any compliant client.
+| ADR | Decision | Source |
+|-----|----------|--------|
+| 001 | Official `@a2a-js/sdk` types | A2A project |
+| 003 | CrewAI Crew/Agent/Task pattern | CrewAI (47K⭐) |
+| 005 | Task lifecycle follows A2A spec | A2A proto |
+| 006 | SSE streaming, not polling | A2A spec |
+| 010 | Agent card per spawned agent | A2A §7 |
 
 </details>
 
 ---
 
-## Architecture Decisions
+## Install
 
-Every design choice is backed by research. 10 ADRs documented in [`docs/architecture-decisions.md`](docs/architecture-decisions.md).
+```bash
+# Recommended
+git clone https://github.com/aviraldua93/a2a-crews.git
+cd a2a-crews && bun install
 
-| ADR | Decision | Source |
-|-----|----------|--------|
-| 001 | Use official `@a2a-js/sdk` — don't reimplement types | a2a-js official SDK |
-| 002 | Follow python-a2a HTTP route structure | python-a2a (988⭐) |
-| 003 | CrewAI's Crew/Agent/Task class separation | CrewAI (47K⭐) |
-| 005 | Task lifecycle follows A2A spec exactly | A2A proto spec |
-| 006 | SSE for real-time updates, not polling | A2A streaming spec |
-| 007 | Dynamic tool composition per task | CrewAI pattern |
-| 008 | Context as immutable data flow | CrewAI pattern |
-| 009 | Event bus for telemetry | CrewAI event system |
-| 010 | A2A agent card per spawned agent | A2A spec §7 |
+# Or global
+bun install -g a2a-crews
+
+# Or compiled binary
+bun run build && ./crews plan "Build a calculator"
+```
+
+**Requires:** [Bun](https://bun.sh) 1.0+ · [GitHub Copilot CLI](https://docs.github.com/copilot) · [Windows Terminal](https://aka.ms/terminal) or `tmux`
 
 ---
 
 ## Roadmap
 
-See [`ROADMAP.md`](ROADMAP.md) for the full plan.
-
-- [x] **v0.1** — CLI, A2A bridge, 13 templates, wave orchestration, evidence recovery, 79+ tests
-- [x] **v0.2** — AI planner, custom role generation, feasibility assessment
-- [ ] **v0.3** — Auto-retry, heartbeat monitoring, context checkpoint handoff
-- [ ] **v0.4** — Review feedback loops, structured grading, harness iteration
-- [ ] **v0.5** — macOS/Linux, npm install, compiled binaries
+- [x] **v0.1** — CLI, A2A bridge, 13 templates, wave orchestration, 119 tests
+- [x] **v0.2** — AI planner, feasibility assessment, `@a2a-js/sdk` integration
+- [ ] **v0.3** — Auto-retry, heartbeat monitoring, checkpoint handoff
+- [ ] **v0.4** — Review feedback loops, harness iteration
 - [ ] **v1.0** — External A2A agent interop, web dashboard, cost tracking
 
----
-
-## Install
-
-### From source (recommended)
-```bash
-git clone https://github.com/aviraldua93/a2a-crews.git
-cd a2a-crews
-bun install
-bun run dev
-```
-
-### Global install
-```bash
-bun install -g a2a-crews
-```
-
-### Compiled binary
-```bash
-bun run build
-./crews plan "Build a calculator"
-```
-
-### Requirements
-- [Bun](https://bun.sh) 1.0+
-- [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) (`copilot` command)
-- [Windows Terminal](https://aka.ms/terminal) (Windows) or `tmux` (macOS/Linux)
+See [`ROADMAP.md`](ROADMAP.md) for details.
 
 ---
 
-## Built On
-
-- **[A2A Protocol](https://google.github.io/A2A/)** — Google's open standard for agent-to-agent communication
-- **[a2a-js](https://github.com/a2aproject/a2a-js)** — Official A2A TypeScript SDK
-- **[Bun](https://bun.sh)** — TypeScript runtime with native test runner
-- **[CrewAI](https://github.com/crewAIInc/crewAI)** patterns — Crew/Agent/Task orchestration (47K⭐)
-- Anthropic's research on [agent evaluation harnesses](https://www.anthropic.com/) — informed our iterative review loops
-
----
-
-## License
+**Built on** [A2A Protocol](https://a2aproject.org) · [`@a2a-js/sdk`](https://github.com/a2aproject/a2a-js) · [Bun](https://bun.sh) · [CrewAI](https://github.com/crewAIInc/crewAI) patterns
 
 [MIT](LICENSE) © 2026 Aviral Dua
