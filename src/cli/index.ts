@@ -90,6 +90,41 @@ function isProjectActive(projectDir: string): boolean {
   } catch { return false; }
 }
 
+/** Generate a clean, readable team name from a scenario string. */
+function generateTeamName(scenario: string): string {
+  // Remove filler words to get a meaningful slug
+  const stopWords = new Set([
+    'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'is', 'it', 'that', 'this', 'be', 'are',
+    'was', 'were', 'been', 'being', 'have', 'has', 'had', 'do', 'does',
+    'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall',
+    'can', 'need', 'must', 'all', 'each', 'every', 'both', 'few', 'more',
+    'most', 'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same',
+    'so', 'than', 'too', 'very', 'just', 'because', 'as', 'until', 'while',
+    'about', 'between', 'through', 'during', 'before', 'after', 'above',
+    'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again',
+    'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
+    'how', 'what', 'which', 'who', 'whom', 'build', 'create', 'make',
+    'write', 'implement', 'add', 'using', 'use',
+  ]);
+
+  const words = scenario
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !stopWords.has(w));
+
+  // Take up to 4 meaningful words, join with dash
+  const slug = words.slice(0, 4).join('-');
+
+  // Fallback if everything got filtered
+  if (!slug) {
+    return scenario.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+  }
+
+  return slug.slice(0, 40).replace(/-$/, '');
+}
+
 switch (command) {
   case 'plan':
     await handlePlan(args.join(' '));
@@ -269,12 +304,8 @@ async function handleApply(): Promise<void> {
     status: t.dependsOn.length > 0 ? 'blocked' : 'pending',
   })));
 
-  // Derive team name from scenario
-  const teamName = plan.scenario
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40);
+  // Derive team name from scenario — smart slug, not dumb truncation
+  const teamName = generateTeamName(plan.scenario);
 
   const teamDir = join(BASE_DIR, teamName);
   const artifactsDir = join(teamDir, 'artifacts');
@@ -337,7 +368,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
     }
     const plan: Plan = await Bun.file(planPath).json();
     const { agents, tasks } = composeFromPlan(plan);
-    teamName = plan.scenario.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+    teamName = generateTeamName(plan.scenario);
     crewConfig = {
       name: teamName,
       scenario: plan.scenario,
