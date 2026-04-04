@@ -209,7 +209,7 @@ export class A2ABridge {
             const update = {
               kind: 'status-update',
               taskId,
-              contextId: taskId,
+              contextId: currentTask.contextId,
               status: { state: currentTask.status, timestamp: currentTask.updatedAt },
               final: TERMINAL_STATES.includes(currentTask.status),
             };
@@ -219,7 +219,7 @@ export class A2ABridge {
               const artifactUpdate = {
                 kind: 'artifact-update',
                 taskId,
-                contextId: taskId,
+                contextId: currentTask.contextId,
                 artifact: {
                   artifactId: 'result',
                   parts: [{ kind: 'text', text: currentTask.result }],
@@ -574,9 +574,11 @@ export class A2ABridge {
       task.status = status as BridgeTaskStatus;
     }
     if (result !== undefined && typeof result === 'string') {
+      // Only append to history if result actually changed (avoid duplicates on retry)
+      if (task.result !== result) {
+        task.history.push({ role: 'agent', text: result, timestamp: new Date().toISOString() });
+      }
       task.result = result;
-      // Record agent completion in history
-      task.history.push({ role: 'agent', text: result, timestamp: new Date().toISOString() });
     }
 
     task.updatedAt = new Date().toISOString();
@@ -897,7 +899,10 @@ export class A2ABridge {
       status: 'submitted',
       message: text,
       history: [{ role: 'user', text, timestamp: now, metadata: message.metadata as Record<string, unknown> | undefined }],
-      metadata: (typeof p.metadata === 'object' && p.metadata !== null ? p.metadata : {}) as Record<string, unknown>,
+      metadata: {
+        ...((typeof message.metadata === 'object' && message.metadata !== null ? message.metadata : {}) as Record<string, unknown>),
+        ...((typeof p.metadata === 'object' && p.metadata !== null ? p.metadata : {}) as Record<string, unknown>),
+      },
       createdAt: now,
       updatedAt: now,
     };
