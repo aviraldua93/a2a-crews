@@ -7,7 +7,7 @@ You describe the task. The AI planner reads your codebase, assesses feasibility,
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://www.typescriptlang.org/)
 [![A2A Protocol](https://img.shields.io/badge/A2A_v0.3-@a2a--js/sdk-7C3AED.svg)](https://a2aproject.org)
-[![Tests](https://img.shields.io/badge/tests-119_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-149_passing-brightgreen.svg)](tests/)
 
 > **Requires:** [Bun](https://bun.sh) · [GitHub Copilot CLI](https://docs.github.com/copilot) · [Windows Terminal](https://aka.ms/terminal) or tmux
 
@@ -51,8 +51,10 @@ That's not a template. The AI planner **read the codebase**, understood it's an 
 | **Auto-generates team from task** | ✅ Or use 13 presets | ⚠️ You define roles | ⚠️ You build graph | ⚠️ You configure |
 | **Pre-flight feasibility gate** | ✅ Heuristic scoring | ❌ | ❌ | ❌ |
 | **A2A protocol (SDK types)** | ✅ `@a2a-js/sdk` | ❌ | ❌ | ❌ |
-| **Parallel wave execution** | ✅ DAG scheduling | ✅ | ✅ | ✅ |
-| **Auto-retry + recovery** | ✅ Evidence-based | ⚠️ Basic | ❌ | ❌ |
+| **Agent-to-agent messaging** | ✅ Bridge relay | ❌ File-based | ❌ | ⚠️ Chat |
+| **Cost & token tracking** | ✅ Per-agent + budget | ❌ | ❌ | ❌ |
+| **Human-in-the-loop** | ✅ `input-required` state | ⚠️ Manual | ⚠️ Interrupt | ⚠️ Manual |
+| **Auto-retry + recovery** | ✅ Exponential backoff | ⚠️ Basic | ❌ | ❌ |
 
 **The difference:** You describe the task. a2a-crews spawns an AI planner (via Copilot CLI) that explores your repo, understands the domain, and designs a team with feasibility checks — before spending tokens on execution.
 
@@ -67,9 +69,12 @@ bun install -g a2a-crews
 crews plan "Build a REST API with auth and tests"
 crews apply
 crews launch
+
+# Or target a different project directory
+crews -d /path/to/project plan "Build a dashboard"
 ```
 
-Agents spawn in parallel terminal tabs, coordinate via [A2A protocol](https://a2aproject.org), and deliver working code. Watch with `crews watch`. Stop with `crews stop`.
+Agents spawn in parallel terminal tabs, coordinate via [A2A protocol](https://a2aproject.org), and deliver working code. Watch with `crews watch`. Stop with `crews stop`. Agents can message each other, report errors, and request human input — all through the bridge.
 
 ---
 
@@ -184,16 +189,20 @@ Built on the **official [`@a2a-js/sdk`](https://github.com/a2aproject/a2a-js)** 
 
 All types come from the SDK: `AgentCard`, `Message`, `Task`, `Part`, `Artifact`, `TaskState`.
 
-#### JSON-RPC Methods
+#### JSON-RPC Methods (10 total)
 
 | Method | Description | Streaming |
 |--------|-------------|-----------|
 | `message/send` | Send a message, get a Task back | No |
 | `message/stream` | Send + SSE task updates | ✅ |
-| `tasks/get` | Retrieve task state + artifacts | No |
+| `message/relay` | Route message between agents | No |
+| `messages/poll` | Check agent inbox for messages | No |
+| `tasks/get` | Retrieve task state + history + artifacts | No |
 | `tasks/list` | Query tasks with filters + pagination | No |
 | `tasks/cancel` | Cancel a running task | No |
 | `tasks/subscribe` | Subscribe to live task updates | ✅ |
+
+Plus REST endpoints: agent registration, heartbeat, error reporting, task CRUD.
 
 #### Agent Discovery
 
@@ -202,9 +211,19 @@ GET /.well-known/agent-card.json
 → AgentCard { protocolVersion: "0.3.0", skills, capabilities, ... }
 ```
 
+#### Key Capabilities
+
+- **Task history**: Every message (user + agent) accumulated in `history[]`, returned via `tasks/get`
+- **Agent messaging**: Agents relay messages through the bridge (`message/relay` → inbox → `messages/poll`)
+- **Error reporting**: `POST /agents/:name/events` with structured types (port_conflict, tool_failure, etc.) — fatal errors auto-fail linked tasks
+- **Human-in-the-loop**: `input-required` TaskState pauses tasks until user provides input, then resumes
+- **Cost tracking**: Agents report token usage on task completion. `/status` shows per-agent and crew-wide totals with budget limits
+- **Bridge registry**: Active bridges register at `~/.a2a-crews/active-bridges/` for cross-repo discovery
+- **Exponential backoff retry**: Base 10min timeout × 1.5^attempt × 3 when files are changing (30-67min for active agents)
+
 #### Production Hardening
 
-Rate limits (100K tasks, 1K agents, 100 SSE) · Circular event log (10K) · Text truncation (1MB) · SSE auto-close on disconnect · Input validation · Standard JSON-RPC error codes
+Rate limits (100K tasks, 1K agents, 100 SSE, 1K inbox) · Circular event log (10K) · Text truncation (1MB) · SSE auto-close on disconnect · Input validation · Standard JSON-RPC error codes · Budget exceeded events
 
 </details>
 
@@ -249,11 +268,11 @@ bun run build && ./crews plan "Build a calculator"
 
 ## Roadmap
 
-- [x] **v0.1** — CLI, A2A bridge, 13 templates, wave orchestration, 119 tests
+- [x] **v0.1** — CLI, A2A bridge, 13 templates, wave orchestration, evidence recovery
 - [x] **v0.2** — AI planner, feasibility assessment, `@a2a-js/sdk` integration
-- [ ] **v0.3** — Auto-retry, heartbeat monitoring, checkpoint handoff
+- [x] **v0.3** — Agent messaging, cost tracking, error reporting, input-required, exponential backoff retry, bridge registry, 149 tests
 - [ ] **v0.4** — Review feedback loops, harness iteration
-- [ ] **v1.0** — External A2A agent interop, web dashboard, cost tracking
+- [ ] **v1.0** — Web dashboard, push notifications, external agent federation
 
 See [`ROADMAP.md`](ROADMAP.md) for details.
 
