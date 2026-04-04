@@ -52,6 +52,26 @@ export interface AgentEvent {
   details?: Record<string, unknown>;
 }
 
+/** Relayed message between agents (#15). */
+export interface RelayedMessage {
+  id: string;
+  from: string;
+  to: string;
+  text: string;
+  contextId?: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Token usage tracking per task (#16). */
+export interface TaskUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCostUsd?: number;
+  model?: string;
+}
+
 export interface BridgeTask {
   id: string;
   contextId: string;
@@ -61,6 +81,7 @@ export interface BridgeTask {
   result?: string;
   history: BridgeMessage[];
   metadata: Record<string, unknown>;
+  usage?: TaskUsage;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,7 +96,9 @@ type BridgeEventType =
   | 'task:updated'
   | 'task:completed'
   | 'task:failed'
-  | 'task:input-required';
+  | 'task:input-required'
+  | 'message:relayed'
+  | 'budget:exceeded';
 
 // ─── Limits ────────────────────────────────────────────────────────
 
@@ -85,6 +108,8 @@ const MAX_EVENT_LOG = 10_000;
 const MAX_SSE_CONNECTIONS = 100;
 const MAX_PARTS = 1_000;
 const MAX_TEXT_LENGTH = 1_000_000; // 1 MB
+const MAX_INBOX_SIZE = 1_000;      // per-agent message inbox
+const MAX_TOTAL_TOKENS = 10_000_000;  // crew-wide budget (configurable)
 
 // ─── Bridge ────────────────────────────────────────────────────────
 
@@ -96,6 +121,9 @@ export class A2ABridge {
   private port: number;
   private eventLog: string[] = [];
   private activeSSEConnections = 0;
+  private agentInboxes: Map<string, RelayedMessage[]> = new Map();
+  private totalUsage: TaskUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCostUsd: 0 };
+  private agentUsage: Map<string, TaskUsage> = new Map();
 
   constructor(port: number = 8222) {
     this.port = port;
@@ -108,6 +136,34 @@ export class A2ABridge {
     // Circular buffer — prevent unbounded growth
     if (this.eventLog.length > MAX_EVENT_LOG) {
       this.eventLog = this.eventLog.slice(-MAX_EVENT_LOG);
+    }
+  }
+
+  /** Accumulate token usage for an agent and crew-wide total. */
+  private trackUsage(agentName: string, usage: TaskUsage): void {
+    // Agent-level
+    const existing = this.agentUsage.get(agentName) ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCostUsd: 0 };
+    existing.promptTokens += usage.promptTokens;
+    existing.completionTokens += usage.completionTokens;
+    existing.totalTokens += usage.totalTokens;
+    existing.estimatedCostUsd = (existing.estimatedCostUsd ?? 0) + (usage.estimatedCostUsd ?? 0);
+    this.agentUsage.set(agentName, existing);
+
+    // Crew-wide total
+    this.totalUsage.promptTokens += usage.promptTokens;
+    this.totalUsage.completionTokens += usage.completionTokens;
+    this.totalUsage.totalTokens += usage.totalTokens;
+    this.totalUsage.estimatedCostUsd = (this.totalUsage.estimatedCostUsd ?? 0) + (usage.estimatedCostUsd ?? 0);
+
+    this.logEvent('usage_reported', '', agentName, `${usage.totalTokens} tokens`);
+
+    // Budget check
+    if (this.totalUsage.totalTokens > MAX_TOTAL_TOKENS) {
+      this.emit('budget:exceeded', {
+        totalTokens: this.totalUsage.totalTokens,
+        limit: MAX_TOTAL_TOKENS,
+        agent: agentName,
+      });
     }
   }
 
@@ -155,6 +211,8 @@ export class A2ABridge {
     const artifacts: Artifact[] = task.result
       ? [{ artifactId: 'result', parts: [{ kind: 'text' as const, text: task.result }] }]
       : [];
+    const meta: Record<string, unknown> = { ...task.metadata };
+    if (task.usage) meta.usage = task.usage;
     return {
       kind: 'task',
       id: task.id,
@@ -168,7 +226,7 @@ export class A2ABridge {
         parts: [{ kind: 'text', text: m.text }],
         metadata: m.metadata,
       })),
-      metadata: Object.keys(task.metadata).length > 0 ? task.metadata : undefined,
+      metadata: Object.keys(meta).length > 0 ? meta : undefined,
     };
   }
 
@@ -581,6 +639,21 @@ export class A2ABridge {
       task.result = result;
     }
 
+    // Track token usage (#16)
+    const { usage } = body as Record<string, unknown>;
+    if (usage && typeof usage === 'object') {
+      const u = usage as Record<string, unknown>;
+      const taskUsage: TaskUsage = {
+        promptTokens: typeof u.promptTokens === 'number' ? u.promptTokens : 0,
+        completionTokens: typeof u.completionTokens === 'number' ? u.completionTokens : 0,
+        totalTokens: typeof u.totalTokens === 'number' ? u.totalTokens : 0,
+        estimatedCostUsd: typeof u.estimatedCostUsd === 'number' ? u.estimatedCostUsd : undefined,
+        model: typeof u.model === 'string' ? u.model : undefined,
+      };
+      task.usage = taskUsage;
+      this.trackUsage(task.assignedTo, taskUsage);
+    }
+
     task.updatedAt = new Date().toISOString();
     this.logEvent('task_updated', id, task.assignedTo, task.status);
 
@@ -666,6 +739,11 @@ export class A2ABridge {
     const agents = Array.from(this.agents.values());
     const tasks = Array.from(this.tasks.values());
 
+    const byAgent: Record<string, TaskUsage> = {};
+    for (const [name, usage] of this.agentUsage.entries()) {
+      byAgent[name] = usage;
+    }
+
     return this.jsonOk({
       bridge: 'running',
       port: this.port,
@@ -684,6 +762,18 @@ export class A2ABridge {
         completed: tasks.filter((t) => t.status === 'completed').length,
         failed: tasks.filter((t) => t.status === 'failed').length,
         canceled: tasks.filter((t) => t.status === 'canceled').length,
+      },
+      usage: {
+        totalTokens: this.totalUsage.totalTokens,
+        promptTokens: this.totalUsage.promptTokens,
+        completionTokens: this.totalUsage.completionTokens,
+        estimatedCostUsd: this.totalUsage.estimatedCostUsd,
+        budgetLimit: MAX_TOTAL_TOKENS,
+        byAgent,
+      },
+      messaging: {
+        totalInboxes: this.agentInboxes.size,
+        totalMessages: Array.from(this.agentInboxes.values()).reduce((sum, inbox) => sum + inbox.length, 0),
       },
     });
   }
@@ -834,6 +924,90 @@ export class A2ABridge {
           );
         }
         return this.createTaskStream(task.id, this.toA2ATask(task));
+      }
+
+      // ── Agent-to-agent messaging (#15) ──────────────────────
+      case 'message/relay': {
+        const p = (params ?? {}) as Record<string, unknown>;
+        const from = typeof p.from === 'string' ? p.from : undefined;
+        const to = typeof p.to === 'string' ? p.to : undefined;
+        const msg = p.message as Record<string, unknown> | undefined;
+
+        if (!from || !to) {
+          return Response.json(
+            { jsonrpc: '2.0', id, error: { code: -32602, message: 'Missing from or to field' } },
+            { status: 400 },
+          );
+        }
+        if (!this.agents.has(to)) {
+          return Response.json(
+            { jsonrpc: '2.0', id, error: { code: -32602, message: `Unknown target agent: ${to}`, data: { type: 'AgentNotFoundError' } } },
+            { status: 404 },
+          );
+        }
+
+        // Extract text from message parts or use raw string
+        let text = '';
+        if (msg && Array.isArray(msg.parts)) {
+          const textPart = (msg.parts as Array<Record<string, unknown>>).find(
+            (p) => p.kind === 'text' || p.type === 'text',
+          );
+          text = (textPart && typeof textPart.text === 'string') ? textPart.text : JSON.stringify(msg.parts);
+        } else if (typeof p.text === 'string') {
+          text = p.text;
+        }
+
+        const relayed: RelayedMessage = {
+          id: crypto.randomUUID(),
+          from,
+          to,
+          text,
+          contextId: typeof p.contextId === 'string' ? p.contextId : undefined,
+          timestamp: new Date().toISOString(),
+          metadata: typeof msg?.metadata === 'object' ? msg.metadata as Record<string, unknown> : undefined,
+        };
+
+        // Deliver to inbox
+        let inbox = this.agentInboxes.get(to);
+        if (!inbox) {
+          inbox = [];
+          this.agentInboxes.set(to, inbox);
+        }
+        inbox.push(relayed);
+        // Trim inbox if over limit
+        if (inbox.length > MAX_INBOX_SIZE) {
+          inbox.splice(0, inbox.length - MAX_INBOX_SIZE);
+        }
+
+        this.logEvent('message_relayed', relayed.contextId ?? '', `${from}->${to}`, text.slice(0, 100));
+        this.emit('message:relayed', { from, to, messageId: relayed.id, contextId: relayed.contextId });
+
+        return Response.json({ jsonrpc: '2.0', id, result: { ok: true, message: relayed } });
+      }
+
+      case 'messages/poll': {
+        const p = (params ?? {}) as Record<string, unknown>;
+        const agent = typeof p.agent === 'string' ? p.agent : undefined;
+        if (!agent) {
+          return Response.json(
+            { jsonrpc: '2.0', id, error: { code: -32602, message: 'Missing agent field' } },
+            { status: 400 },
+          );
+        }
+
+        const inbox = this.agentInboxes.get(agent) ?? [];
+        const since = typeof p.since === 'string' ? p.since : undefined;
+
+        let messages = inbox;
+        if (since) {
+          messages = inbox.filter(m => m.timestamp > since);
+        }
+
+        return Response.json({
+          jsonrpc: '2.0',
+          id,
+          result: { messages, count: messages.length },
+        });
       }
 
       default:

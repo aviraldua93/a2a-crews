@@ -164,4 +164,43 @@ export class A2AClient {
     });
     return res.json() as Promise<Record<string, unknown>>;
   }
+
+  /** Relay a message from one agent to another via the bridge. */
+  async relay(from: string, to: string, text: string, contextId?: string): Promise<Record<string, unknown>> {
+    const res = await fetch(`${this.baseUrl}/a2a`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'message/relay',
+        params: {
+          from,
+          to,
+          message: { kind: 'message', messageId: crypto.randomUUID(), role: 'agent', parts: [{ kind: 'text', text }] },
+          contextId,
+        },
+      }),
+    });
+    const body = await res.json() as Record<string, unknown>;
+    if ((body as any).error) throw new Error(`JSON-RPC error: ${JSON.stringify((body as any).error)}`);
+    return (body as any).result;
+  }
+
+  /** Poll an agent's inbox for messages from other agents. */
+  async poll(agentName: string, since?: string): Promise<Record<string, unknown>> {
+    const res = await fetch(`${this.baseUrl}/a2a`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'messages/poll',
+        params: { agent: agentName, since },
+      }),
+    });
+    const body = await res.json() as Record<string, unknown>;
+    if ((body as any).error) throw new Error(`JSON-RPC error: ${JSON.stringify((body as any).error)}`);
+    return (body as any).result;
+  }
 }
