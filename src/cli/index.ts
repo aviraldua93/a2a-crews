@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
 import { join, resolve } from 'path';
-import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
+import { mkdirSync, existsSync, writeFileSync, unlinkSync, readdirSync, readFileSync, rmSync } from 'fs';
+import { homedir } from 'os';
 import { composeFromTemplate, composeFromPlan, findBestTemplate, assessFeasibility, runAIPlanner, isAIPlannerAvailable } from '../planner';
 import { planSummary, type Plan } from '../planner/plan';
 import { Task } from '../crew/task';
@@ -12,6 +13,48 @@ import { spawnAgent } from '../spawner/terminal';
 import { generateAgentPrompt } from '../spawner/prompt';
 import { listPresets, loadPreset } from '../templates';
 import { printHeader, printRoles, printTasks, printSummary } from './display';
+
+// ── Central bridge registry (#19) ──────────────────────────────────
+const REGISTRY_DIR = join(homedir(), '.a2a-crews', 'active-bridges');
+
+function registerBridge(teamName: string, info: { url: string; port: number; pid: number; cwd: string; startedAt: string }): void {
+  mkdirSync(REGISTRY_DIR, { recursive: true });
+  writeFileSync(join(REGISTRY_DIR, `${teamName}.json`), JSON.stringify(info, null, 2));
+}
+
+function unregisterBridge(teamName: string): void {
+  const path = join(REGISTRY_DIR, `${teamName}.json`);
+  if (existsSync(path)) {
+    try { unlinkSync(path); } catch { /* best-effort */ }
+  }
+}
+
+function cleanupStaleBridges(): void {
+  if (!existsSync(REGISTRY_DIR)) return;
+  try {
+    for (const file of readdirSync(REGISTRY_DIR)) {
+      if (!file.endsWith('.json')) continue;
+      try {
+        const info = JSON.parse(readFileSync(join(REGISTRY_DIR, file), 'utf-8'));
+        if (info.pid && !isProcessAlive(info.pid)) {
+          unlinkSync(join(REGISTRY_DIR, file));
+        }
+      } catch {
+        // Corrupt file — remove it
+        try { unlinkSync(join(REGISTRY_DIR, file)); } catch { /* ignore */ }
+      }
+    }
+  } catch { /* directory read failed */ }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ── Parse --project-dir / -d flag before command dispatch ────────────
 function parseProjectDir(argv: string[]): { projectDir: string; filteredArgs: string[] } {
@@ -316,12 +359,18 @@ async function handleLaunch(teamName?: string): Promise<void> {
   // Save bridge info so watch/stop can find it
   const teamDir = join(BASE_DIR, crewConfig.name);
   mkdirSync(teamDir, { recursive: true });
-  await Bun.write(join(teamDir, 'bridge.json'), JSON.stringify({
+  const bridgeInfo = {
     url: bridgeUrl,
     port: bridge.actualPort,
     pid: process.pid,
+    cwd: projectDir,
     startedAt: new Date().toISOString(),
-  }, null, 2));
+  };
+  await Bun.write(join(teamDir, 'bridge.json'), JSON.stringify(bridgeInfo, null, 2));
+
+  // Register in central registry for cross-repo discovery (#19)
+  cleanupStaleBridges();
+  registerBridge(crewConfig.name, bridgeInfo);
 
   // Build Task objects for wave computation
   const taskObjects = crewConfig.tasks.map(t => new Task({
@@ -598,6 +647,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
   process.on('SIGINT', () => {
     console.log('\n  🛑 Stopping bridge...');
     bridge.stop();
+    unregisterBridge(crewConfig.name);
     process.exit(0);
   });
 
@@ -606,6 +656,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
     if (existsSync(stopFile)) {
       clearInterval(keepAlive);
       bridge.stop();
+      unregisterBridge(crewConfig.name);
       unlinkSync(stopFile);
       console.log('  🛑 Bridge stopped via crews stop.');
       process.exit(0);
@@ -731,6 +782,7 @@ async function handleStop(teamName?: string): Promise<void> {
 
   // Write stop signal file — the launch process polls for this
   await Bun.write(join(teamDir, '.stop'), new Date().toISOString());
+  unregisterBridge(teamName);
   console.log(`  🛑 Stop signal sent to team '${teamName}'. Bridge will shut down shortly.`);
   process.exit(0);
 }
