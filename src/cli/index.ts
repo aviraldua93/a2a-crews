@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
 import { composeFromTemplate, composeFromPlan, findBestTemplate, assessFeasibility, runAIPlanner, isAIPlannerAvailable } from '../planner';
 import { planSummary, type Plan } from '../planner/plan';
@@ -13,7 +13,28 @@ import { generateAgentPrompt } from '../spawner/prompt';
 import { listPresets, loadPreset } from '../templates';
 import { printHeader, printRoles, printTasks, printSummary } from './display';
 
-const BASE_DIR = join(process.cwd(), '.a2a-crews');
+// ── Parse --project-dir / -d flag before command dispatch ────────────
+function parseProjectDir(argv: string[]): { projectDir: string; filteredArgs: string[] } {
+  const filtered: string[] = [];
+  let dir = process.cwd();
+
+  for (let i = 0; i < argv.length; i++) {
+    if ((argv[i] === '--project-dir' || argv[i] === '-d') && argv[i + 1]) {
+      dir = resolve(argv[i + 1]);
+      i++; // skip value
+    } else {
+      filtered.push(argv[i]);
+    }
+  }
+
+  return { projectDir: dir, filteredArgs: filtered };
+}
+
+const { projectDir, filteredArgs } = parseProjectDir(process.argv.slice(2));
+const command = filteredArgs[0];
+const args = filteredArgs.slice(1);
+
+const BASE_DIR = join(projectDir, '.a2a-crews');
 
 /** Check if the project has recent uncommitted changes (proxy for agent activity). */
 function isProjectActive(projectDir: string): boolean {
@@ -25,9 +46,6 @@ function isProjectActive(projectDir: string): boolean {
     return diff.trim().length > 0;
   } catch { return false; }
 }
-
-const command = process.argv[2];
-const args = process.argv.slice(3);
 
 switch (command) {
   case 'plan':
@@ -64,7 +82,7 @@ async function handlePlan(scenario: string): Promise<void> {
   printHeader('PLANNING');
   console.log(`  Scenario: ${scenario}\n`);
 
-  const planDir = join(process.cwd(), '.a2a-crews');
+  const planDir = join(projectDir, '.a2a-crews');
 
   // Remove old plan
   const oldPlan = join(planDir, 'plan.json');
@@ -75,7 +93,7 @@ async function handlePlan(scenario: string): Promise<void> {
   // Try AI planner first
   if (isAIPlannerAvailable()) {
     console.log('  🤖 AI planner available — spawning intelligent planner\n');
-    const success = await runAIPlanner(scenario, process.cwd());
+    const success = await runAIPlanner(scenario, projectDir);
 
     if (success) {
       // Read and display the AI-generated plan
@@ -103,7 +121,7 @@ async function handlePlan(scenario: string): Promise<void> {
   console.log(`  📋 Best template: ${templateName}\n`);
 
   // Run heuristic feasibility assessment
-  const assessment = assessFeasibility(scenario, process.cwd());
+  const assessment = assessFeasibility(scenario, projectDir);
 
   console.log(`  FEASIBILITY`);
   const icon = assessment.overall.verdict === 'go' ? '✅' : assessment.overall.verdict === 'risky' ? '⚠️' : '🛑';
@@ -401,14 +419,14 @@ async function handleLaunch(teamName?: string): Promise<void> {
         tasks: agentTasks,
         scenario: crewConfig.scenario,
         bridgeUrl,
-        projectDir: process.cwd(),
+        projectDir: projectDir,
       });
 
       console.log(`    🚀 Spawning ${agent.name} for task "${task.id}"`);
       await spawnAgent({
         name: agent.key,
         prompt,
-        cwd: process.cwd(),
+        cwd: projectDir,
         model: agent.model,
         bridgeUrl,
         taskId: bridgeTaskIds.get(task.id),
@@ -458,7 +476,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
 
           if (stuckDuration > DEAD_AGENT_TIMEOUT_MS) {
             // Before retrying, check if agent is still actively working
-            if (isProjectActive(process.cwd())) {
+            if (isProjectActive(projectDir)) {
               if (elapsed % 60 === 0) {
                 console.log(`    ⏳ ${task.id} — still working (project files changing, ${elapsed}s)`);
               }
@@ -522,13 +540,13 @@ async function handleLaunch(teamName?: string): Promise<void> {
                 tasks: agentTasks,
                 scenario: crewConfig.scenario,
                 bridgeUrl,
-                projectDir: process.cwd(),
+                projectDir: projectDir,
               });
 
               await spawnAgent({
                 name: agent.key,
                 prompt,
-                cwd: process.cwd(),
+                cwd: projectDir,
                 model: agent.model,
                 bridgeUrl,
                 taskId: retryTaskBody.task.id,
@@ -756,7 +774,7 @@ function printHelp(): void {
   console.log(`
   a2a-crews — Turn one command into a team of AI agents
 
-  Usage: crews <command> [options]
+  Usage: crews [options] <command> [args]
 
   Commands:
     plan <scenario>     Assess feasibility and compose a team
@@ -766,13 +784,15 @@ function printHelp(): void {
     stop [name]         Cancel all tasks and stop agents
     templates           List all available crew templates
 
+  Options:
+    --project-dir, -d   Target project directory (default: cwd)
+
   Examples:
     crews plan "Build a REST API with auth and tests"
     crews apply
     crews launch my-api
-    crews watch my-api
-    crews templates
+    crews -d /path/to/project plan "Build a dashboard"
 
-  Built on Google's A2A protocol. https://a2a-protocol.org
+  Built on Google's A2A protocol. https://a2aproject.org
   `);
 }
