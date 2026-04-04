@@ -73,6 +73,15 @@ If your task involves starting a server or service:
 - Use a random high port (49152-65535) or check if your chosen port is available first
 - If a port is taken, pick another one automatically — don't fail
 
+ERROR REPORTING:
+If you encounter a runtime issue (port conflict, missing dependency, tool failure, permission error):
+Report it to the bridge immediately so the orchestrator can react:
+
+Invoke-RestMethod -Uri '${ctx.bridgeUrl}/agents/${ctx.agent.key}/events' -Method POST -ContentType 'application/json' -Body '{"type":"error","message":"Description of what went wrong","taskId":"{TASK_ID}","severity":"error"}'
+
+Severity levels: fatal (auto-fails task), error, warning, info
+Event types: error, port_conflict, tool_failure, dependency_missing, context_overflow
+
 CONTEXT CHECKPOINTS:
 If you are running low on context or have been working for a long time:
 1. Write a checkpoint file to artifacts/checkpoints/{your-role}-checkpoint.json

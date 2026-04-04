@@ -51,6 +51,7 @@ export interface RegisteredAgent {
 export type BridgeTaskStatus =
   | 'submitted'
   | 'working'
+  | 'input-required'
   | 'completed'
   | 'failed'
   | 'canceled';

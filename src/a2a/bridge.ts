@@ -33,12 +33,34 @@ import type { RegisteredAgent, BridgeTaskStatus } from './types';
 // Re-export for backward compatibility
 export type { RegisteredAgent, BridgeTaskStatus } from './types';
 
+/** A2A Message stored in task history. */
+export interface BridgeMessage {
+  role: 'user' | 'agent';
+  text: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Agent runtime event reported via POST /agents/:name/events. */
+export interface AgentEvent {
+  agentName: string;
+  type: 'error' | 'warning' | 'info' | 'port_conflict' | 'tool_failure' | 'dependency_missing' | 'context_overflow';
+  message: string;
+  taskId?: string;
+  severity: 'fatal' | 'error' | 'warning' | 'info';
+  timestamp: string;
+  details?: Record<string, unknown>;
+}
+
 export interface BridgeTask {
   id: string;
+  contextId: string;
   assignedTo: string;
   status: BridgeTaskStatus;
   message: string;
   result?: string;
+  history: BridgeMessage[];
+  metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,10 +70,12 @@ type BridgeEventType =
   | 'agent:registered'
   | 'agent:heartbeat'
   | 'agent:status'
+  | 'agent:event'
   | 'task:created'
   | 'task:updated'
   | 'task:completed'
-  | 'task:failed';
+  | 'task:failed'
+  | 'task:input-required';
 
 // ─── Limits ────────────────────────────────────────────────────────
 
@@ -134,9 +158,17 @@ export class A2ABridge {
     return {
       kind: 'task',
       id: task.id,
-      contextId: task.id,
+      contextId: task.contextId,
       status: { state: task.status as TaskState, timestamp: task.updatedAt },
       artifacts,
+      history: task.history.map(m => ({
+        kind: 'message',
+        messageId: `${task.id}-${m.timestamp}`,
+        role: m.role,
+        parts: [{ kind: 'text', text: m.text }],
+        metadata: m.metadata,
+      })),
+      metadata: Object.keys(task.metadata).length > 0 ? task.metadata : undefined,
     };
   }
 
@@ -248,6 +280,9 @@ export class A2ABridge {
       }
       if (method === 'GET' && path.match(/^\/agents\/[\w-]+\/card$/)) {
         return this.handleGetAgentCard(path.split('/')[2]);
+      }
+      if (method === 'POST' && path.match(/^\/agents\/[\w-]+\/events$/)) {
+        return this.handleAgentEvent(path.split('/')[2], req);
       }
 
       // ── Task routes ───────────────────────────────────────────
@@ -396,6 +431,67 @@ export class A2ABridge {
     return this.jsonOk(card);
   }
 
+  // ── Agent event reporting (#6, #18) ────────────────────────────
+
+  private async handleAgentEvent(agentName: string, req: Request): Promise<Response> {
+    const agent = this.agents.get(agentName);
+    if (!agent) {
+      return this.jsonErr(`Agent not found: ${agentName}`, 404);
+    }
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return this.jsonErr('Invalid JSON body');
+    }
+
+    const { type, message, taskId, severity, details } = body as Record<string, unknown>;
+    if (!type || typeof type !== 'string') {
+      return this.jsonErr('Missing required field: type');
+    }
+    if (!message || typeof message !== 'string') {
+      return this.jsonErr('Missing required field: message');
+    }
+
+    const validTypes = ['error', 'warning', 'info', 'port_conflict', 'tool_failure', 'dependency_missing', 'context_overflow'];
+    if (!validTypes.includes(type)) {
+      return this.jsonErr(`Invalid type. Must be one of: ${validTypes.join(', ')}`);
+    }
+
+    const validSeverities = ['fatal', 'error', 'warning', 'info'];
+    const sev = typeof severity === 'string' && validSeverities.includes(severity)
+      ? severity as AgentEvent['severity']
+      : 'error';
+
+    const event: AgentEvent = {
+      agentName,
+      type: type as AgentEvent['type'],
+      message: message as string,
+      taskId: typeof taskId === 'string' ? taskId : undefined,
+      severity: sev,
+      timestamp: new Date().toISOString(),
+      details: typeof details === 'object' && details !== null ? details as Record<string, unknown> : undefined,
+    };
+
+    this.logEvent(`agent_event:${type}`, (event.taskId ?? ''), agentName, message as string);
+    this.emit('agent:event', { event });
+
+    // If severity is fatal and linked to a task, auto-fail the task
+    if (sev === 'fatal' && event.taskId) {
+      const task = this.tasks.get(event.taskId);
+      if (task && !['completed', 'failed', 'canceled'].includes(task.status)) {
+        task.status = 'failed';
+        task.result = `Agent error (${type}): ${message}`;
+        task.history.push({ role: 'agent', text: `FATAL: ${message}`, timestamp: event.timestamp });
+        task.updatedAt = event.timestamp;
+        this.emit('task:failed', { taskId: event.taskId });
+      }
+    }
+
+    return this.jsonOk({ ok: true, event }, 201);
+  }
+
   // ── Task handlers ──────────────────────────────────────────────
 
   private async handleSendTask(req: Request): Promise<Response> {
@@ -423,11 +519,15 @@ export class A2ABridge {
     }
 
     const now = new Date().toISOString();
+    const taskId = crypto.randomUUID();
     const task: BridgeTask = {
-      id: crypto.randomUUID(),
+      id: taskId,
+      contextId: taskId,
       assignedTo,
       status: 'submitted',
       message,
+      history: [{ role: 'user', text: message, timestamp: now }],
+      metadata: {},
       createdAt: now,
       updatedAt: now,
     };
@@ -463,7 +563,7 @@ export class A2ABridge {
     const { status, result } = body as Record<string, unknown>;
 
     const validStatuses: BridgeTaskStatus[] = [
-      'submitted', 'working', 'completed', 'failed', 'canceled',
+      'submitted', 'working', 'input-required', 'completed', 'failed', 'canceled',
     ];
     if (status !== undefined) {
       if (typeof status !== 'string' || !validStatuses.includes(status as BridgeTaskStatus)) {
@@ -475,6 +575,8 @@ export class A2ABridge {
     }
     if (result !== undefined && typeof result === 'string') {
       task.result = result;
+      // Record agent completion in history
+      task.history.push({ role: 'agent', text: result, timestamp: new Date().toISOString() });
     }
 
     task.updatedAt = new Date().toISOString();
@@ -484,6 +586,8 @@ export class A2ABridge {
       this.emit('task:completed', { taskId: id });
     } else if (task.status === 'failed') {
       this.emit('task:failed', { taskId: id });
+    } else if (task.status === 'input-required') {
+      this.emit('task:input-required', { taskId: id });
     } else {
       this.emit('task:updated', { taskId: id, status: task.status });
     }
@@ -788,9 +892,12 @@ export class A2ABridge {
     const now = new Date().toISOString();
     const task: BridgeTask = {
       id: taskId,
+      contextId: (typeof (p as any).contextId === 'string' ? (p as any).contextId : null) ?? taskId,
       assignedTo: (assignedTo as string) ?? 'unassigned',
       status: 'submitted',
       message: text,
+      history: [{ role: 'user', text, timestamp: now, metadata: message.metadata as Record<string, unknown> | undefined }],
+      metadata: (typeof p.metadata === 'object' && p.metadata !== null ? p.metadata : {}) as Record<string, unknown>,
       createdAt: now,
       updatedAt: now,
     };

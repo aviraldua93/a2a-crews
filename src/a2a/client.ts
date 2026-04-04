@@ -143,4 +143,25 @@ export class A2AClient {
     if (!res.body) throw new Error('No response body for subscribe');
     return res.body;
   }
+
+  /** Report a runtime event (error, warning, etc.) from an agent. */
+  async reportEvent(
+    agentName: string,
+    type: string,
+    message: string,
+    options?: { taskId?: string; severity?: string; details?: Record<string, unknown> },
+  ): Promise<Record<string, unknown>> {
+    const res = await fetch(`${this.baseUrl}/agents/${agentName}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type,
+        message,
+        taskId: options?.taskId,
+        severity: options?.severity ?? 'error',
+        details: options?.details,
+      }),
+    });
+    return res.json() as Promise<Record<string, unknown>>;
+  }
 }
