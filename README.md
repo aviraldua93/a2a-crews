@@ -2,10 +2,14 @@
 
 ### One command. AI designs the team. Agents write the code.
 
+You describe the task. The AI planner reads your codebase, assesses feasibility, designs a custom team, and launches agents that build it — in parallel, with tests. What used to take hours of prompt engineering happens in one command.
+
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://www.typescriptlang.org/)
 [![A2A Protocol](https://img.shields.io/badge/A2A_v0.3-@a2a--js/sdk-7C3AED.svg)](https://a2aproject.org)
 [![Tests](https://img.shields.io/badge/tests-119_passing-brightgreen.svg)](tests/)
+
+> **Requires:** [Bun](https://bun.sh) · [GitHub Copilot CLI](https://docs.github.com/copilot) · [Windows Terminal](https://aka.ms/terminal) or tmux
 
 ```
 $ crews plan "Build a search ranking classifier"
@@ -50,11 +54,14 @@ That's not a template. The AI planner **read the codebase**, understood it's an 
 | **Parallel wave execution** | ✅ DAG scheduling | ✅ | ✅ | ✅ |
 | **Auto-retry + recovery** | ✅ Evidence-based | ⚠️ Basic | ❌ | ❌ |
 
+**The difference:** Other tools make you design the team manually. a2a-crews reads your project, understands the domain, catches risks before you spend tokens, and builds a team that actually fits the problem.
+
 ---
 
 ## Quick Start
 
 ```bash
+# Install (one command)
 bun install -g a2a-crews
 
 crews plan "Build a REST API with auth and tests"
@@ -219,18 +226,22 @@ Every design choice is backed by research. 10 ADRs in [`docs/architecture-decisi
 ## Install
 
 ```bash
-# Recommended
 git clone https://github.com/aviraldua93/a2a-crews.git
 cd a2a-crews && bun install
+```
 
-# Or global
+<details>
+<summary>Other install methods</summary>
+
+```bash
+# Global install
 bun install -g a2a-crews
 
-# Or compiled binary
+# Compiled binary
 bun run build && ./crews plan "Build a calculator"
 ```
 
-**Requires:** [Bun](https://bun.sh) 1.0+ · [GitHub Copilot CLI](https://docs.github.com/copilot) · [Windows Terminal](https://aka.ms/terminal) or `tmux`
+</details>
 
 ---
 
