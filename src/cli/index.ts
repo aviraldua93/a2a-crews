@@ -433,7 +433,9 @@ async function handleLaunch(teamName?: string): Promise<void> {
   const taskSubmittedAt: Map<string, number> = new Map(); // task.id -> timestamp of last spawn
 
   const MAX_RETRIES = 3;
-  const DEAD_AGENT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  const BASE_TIMEOUT_MS = 10 * 60 * 1000;     // 10 minutes base (was 5 — too aggressive)
+  const ACTIVE_MULTIPLIER = 3;                  // 3x timeout when agent shows activity
+  const BACKOFF_MULTIPLIER = 1.5;               // exponential backoff per retry
 
   for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
     const wave = waves[waveIdx];
@@ -539,7 +541,6 @@ async function handleLaunch(teamName?: string): Promise<void> {
         // Evidence-based recovery: check if deliverable file exists
         const deliverablePath = join(teamDir, task.deliverable);
         if (existsSync(deliverablePath)) {
-          // Agent wrote deliverable but didn't update bridge — recover
           console.log(`    🔧 ${task.id} — recovered (deliverable exists, updating bridge)`);
           await fetch(`${bridgeUrl}/tasks/${uuid}`, {
             method: 'PATCH',
@@ -549,23 +550,40 @@ async function handleLaunch(teamName?: string): Promise<void> {
           continue;
         }
 
-        // Dead agent detection: task stuck in 'submitted' with no deliverable
-        if (body.status === 'submitted') {
+        // Dead agent detection: task stuck in non-terminal state
+        if (body.status === 'submitted' || body.status === 'working') {
           const submittedTime = taskSubmittedAt.get(task.id) ?? startTime;
           const stuckDuration = Date.now() - submittedTime;
+          const currentAttempts = spawnAttempts.get(task.id) ?? 0;
 
-          if (stuckDuration > DEAD_AGENT_TIMEOUT_MS) {
-            // Before retrying, check if agent is still actively working
-            if (isProjectActive(projectDir)) {
-              if (elapsed % 60 === 0) {
-                console.log(`    ⏳ ${task.id} — still working (project files changing, ${elapsed}s)`);
-              }
-              allDone = false;
-              continue; // Don't retry — agent is alive
+          // Exponential backoff: increase timeout with each retry attempt
+          const effectiveTimeout = BASE_TIMEOUT_MS * Math.pow(BACKOFF_MULTIPLIER, currentAttempts);
+
+          // Check for evidence of agent activity
+          const projectActive = isProjectActive(projectDir);
+
+          // If project files are changing, extend timeout significantly
+          const timeout = projectActive
+            ? effectiveTimeout * ACTIVE_MULTIPLIER
+            : effectiveTimeout;
+
+          // Log activity status periodically
+          if (projectActive && elapsed % 60 === 0) {
+            const timeoutMin = Math.round(timeout / 60000);
+            console.log(`    ⏳ ${task.id} — still working (files changing, timeout extended to ${timeoutMin}m)`);
+          }
+
+          if (stuckDuration > timeout) {
+            // Final deliverable check before retry (file may have appeared during wait)
+            if (existsSync(deliverablePath)) {
+              console.log(`    🔧 ${task.id} — late recovery (deliverable appeared, updating bridge)`);
+              await fetch(`${bridgeUrl}/tasks/${uuid}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'completed', result: 'Late recovery from deliverable evidence' }),
+              });
+              continue;
             }
-
-            // Only retry if NO file activity AND no deliverable
-            const currentAttempts = spawnAttempts.get(task.id) ?? 0;
 
             if (currentAttempts >= MAX_RETRIES) {
               console.log(`    ☠️  ${task.id} — agent dead, max retries exhausted (${currentAttempts}/${MAX_RETRIES})`);
@@ -578,7 +596,8 @@ async function handleLaunch(teamName?: string): Promise<void> {
               continue;
             }
 
-            console.log(`    🔄 ${task.id} — agent appears dead, retrying (attempt ${currentAttempts + 1}/${MAX_RETRIES})`);
+            const timeoutMin = Math.round(timeout / 60000);
+            console.log(`    🔄 ${task.id} — no activity for ${timeoutMin}m, retrying (attempt ${currentAttempts + 1}/${MAX_RETRIES})`);
 
             // Re-create task on bridge (old one is stale)
             const retryTaskRes = await fetch(`${bridgeUrl}/tasks`, {
