@@ -61,8 +61,12 @@ export async function spawnAgent(config: {
   const platform = detectPlatform();
   const modelFlag = config.model ? ` --model "${config.model}"` : '';
 
+  // Use taskId in filenames to avoid EBUSY race when multiple tasks share the same role (#22)
+  const uniqueSuffix = config.taskId ? config.taskId.slice(0, 8) : crypto.randomUUID().slice(0, 8);
+  const fileBase = `${config.name}-${uniqueSuffix}`;
+
   // Write prompt to temp file to avoid quoting issues
-  const promptFile = `${config.cwd}/.a2a-crews-prompt-${config.name}.txt`.replace(/\//g, platform === 'windows' ? '\\' : '/');
+  const promptFile = `${config.cwd}/.a2a-crews-prompt-${fileBase}.txt`.replace(/\//g, platform === 'windows' ? '\\' : '/');
   await Bun.write(promptFile, config.prompt);
 
   // Build post-completion bridge notification (JSON-RPC primary, REST fallback)
@@ -81,7 +85,7 @@ export async function spawnAgent(config: {
   }
 
   await spawnTab({
-    title: `${config.name} (a2a-crews)`,
+    title: `${fileBase} (a2a-crews)`,
     command,
     cwd: config.cwd,
   });
