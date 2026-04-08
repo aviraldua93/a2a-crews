@@ -1,3 +1,5 @@
+<p align="center"><img src="hero.svg" alt="A2A Crews Hero" width="800" /></p>
+
 # a2a-crews
 
 ### One command. AI designs the team. Agents write the code.
