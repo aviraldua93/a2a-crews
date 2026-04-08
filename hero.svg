@@ -1,0 +1,206 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0a1a"/>
+      <stop offset="100%" stop-color="#0d1033"/>
+    </linearGradient>
+    <linearGradient id="titleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+    <linearGradient id="a2aLine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+    <radialGradient id="centerGlow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cmdGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f97316" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1a3e" stroke-width="0.5"/>
+    </pattern>
+    <style>
+      @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+      @keyframes pulse-slow { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
+      @keyframes dash-flow { 0% { stroke-dashoffset: 24; } 100% { stroke-dashoffset: 0; } }
+      @keyframes dash-flow-rev { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 24; } }
+      @keyframes float-y { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
+      @keyframes scale-pulse { 0%,100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.15); opacity: 1; } }
+      @keyframes ripple { 0% { r: 10; opacity: 0.6; } 100% { r: 30; opacity: 0; } }
+      @keyframes scan { 0% { transform: translateY(-200px); opacity: 0; } 10% { opacity: 0.12; } 90% { opacity: 0.12; } 100% { transform: translateY(200px); opacity: 0; } }
+      @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+      @keyframes particle-up { 0% { transform: translateY(0) scale(1); opacity: 0.8; } 100% { transform: translateY(-60px) scale(0); opacity: 0; } }
+      @keyframes glow-breathe-blue { 0%,100% { filter: drop-shadow(0 0 4px #3b82f6); } 50% { filter: drop-shadow(0 0 12px #60a5fa); } }
+      @keyframes glow-breathe-orange { 0%,100% { filter: drop-shadow(0 0 4px #f97316); } 50% { filter: drop-shadow(0 0 12px #fb923c); } }
+      @keyframes deploy-pulse { 0% { opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+      .grid-overlay { animation: pulse-slow 8s ease-in-out infinite; }
+      .conn-line { stroke-dasharray: 6 6; animation: dash-flow 1.5s linear infinite; }
+      .conn-line-rev { stroke-dasharray: 6 6; animation: dash-flow-rev 2s linear infinite; }
+      .conn-line-slow { stroke-dasharray: 8 8; animation: dash-flow 2.5s linear infinite; }
+      .node-pulse { animation: scale-pulse 3s ease-in-out infinite; }
+      .node-float { animation: float-y 4s ease-in-out infinite; }
+      .node-float-d1 { animation: float-y 4.5s ease-in-out 0.4s infinite; }
+      .node-float-d2 { animation: float-y 5s ease-in-out 0.8s infinite; }
+      .node-float-d3 { animation: float-y 4.2s ease-in-out 1.2s infinite; }
+      .node-float-d4 { animation: float-y 5.2s ease-in-out 1.6s infinite; }
+      .ripple-ring { animation: ripple 3s ease-out infinite; }
+      .ripple-ring-d { animation: ripple 3s ease-out 1.5s infinite; }
+      .scan-line { animation: scan 7s ease-in-out infinite; }
+      .cursor-blink { animation: blink 1s step-end infinite; }
+      .particle { animation: particle-up 3s ease-out infinite; }
+      .particle-d1 { animation: particle-up 3.5s ease-out 0.5s infinite; }
+      .particle-d2 { animation: particle-up 4s ease-out 1s infinite; }
+      .particle-d3 { animation: particle-up 3s ease-out 1.8s infinite; }
+      .particle-d4 { animation: particle-up 4.5s ease-out 0.3s infinite; }
+      .breathe-blue { animation: glow-breathe-blue 4s ease-in-out infinite; }
+      .breathe-orange { animation: glow-breathe-orange 4s ease-in-out infinite; }
+      .panel { fill: #0d0d2a; stroke: #1e1e4a; stroke-width: 1; rx: 6; }
+      .panel-header { fill: #3b82f6; font-family: monospace; font-size: 8px; font-weight: bold; }
+      .panel-text { fill: #94a3b8; font-family: monospace; font-size: 8px; }
+      .panel-text-bright { fill: #e2e8f0; font-family: monospace; font-size: 8px; }
+      .label { fill: #cbd5e1; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 9px; text-anchor: middle; }
+      .status-text { fill: #64748b; font-family: monospace; font-size: 9px; }
+      .status-dot { animation: pulse 2s ease-in-out infinite; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="400" fill="url(#bg)"/>
+  <rect width="800" height="400" fill="url(#grid)" class="grid-overlay"/>
+  <ellipse cx="400" cy="170" rx="200" ry="120" fill="url(#centerGlow)"/>
+
+  <!-- Scan line -->
+  <rect x="0" y="0" width="800" height="3" fill="#3b82f6" opacity="0.08" class="scan-line"/>
+
+  <!-- Title -->
+  <text x="400" y="48" text-anchor="middle" fill="url(#titleGrad)" font-family="'Segoe UI', system-ui, sans-serif" font-size="36" font-weight="bold" letter-spacing="6">A2A CREWS</text>
+  <text x="400" y="70" text-anchor="middle" fill="#94a3b8" font-family="'Segoe UI', system-ui, sans-serif" font-size="12" letter-spacing="2">Turn One Command Into a Team of AI Agents</text>
+
+  <!-- Command terminal node (top center) -->
+  <circle cx="400" cy="130" r="24" fill="none" stroke="#f97316" stroke-width="1.5" opacity="0.3" class="ripple-ring"/>
+  <circle cx="400" cy="130" r="24" fill="none" stroke="#f97316" stroke-width="1" opacity="0.2" class="ripple-ring-d"/>
+  <ellipse cx="400" cy="130" rx="30" ry="30" fill="url(#cmdGlow)"/>
+  <circle cx="400" cy="130" r="16" fill="#0d1033" stroke="#f97316" stroke-width="2" filter="url(#glowStrong)" class="node-pulse"/>
+  <text x="400" y="135" text-anchor="middle" fill="#f97316" font-family="monospace" font-size="13" font-weight="bold">⌘</text>
+
+  <!-- Deployment fan lines from command to agents -->
+  <line x1="400" y1="148" x2="240" y2="250" stroke="url(#a2aLine)" stroke-width="1.2" opacity="0.5" class="conn-line"/>
+  <line x1="400" y1="148" x2="320" y2="260" stroke="url(#a2aLine)" stroke-width="1.2" opacity="0.5" class="conn-line"/>
+  <line x1="400" y1="148" x2="400" y2="265" stroke="url(#a2aLine)" stroke-width="1.2" opacity="0.5" class="conn-line"/>
+  <line x1="400" y1="148" x2="480" y2="260" stroke="url(#a2aLine)" stroke-width="1.2" opacity="0.5" class="conn-line"/>
+  <line x1="400" y1="148" x2="560" y2="250" stroke="url(#a2aLine)" stroke-width="1.2" opacity="0.5" class="conn-line"/>
+
+  <!-- Inter-agent A2A protocol lines -->
+  <line x1="258" y1="250" x2="312" y2="260" stroke="#3b82f6" stroke-width="0.8" opacity="0.3" class="conn-line-slow"/>
+  <line x1="335" y1="260" x2="388" y2="265" stroke="#3b82f6" stroke-width="0.8" opacity="0.3" class="conn-line-slow"/>
+  <line x1="412" y1="265" x2="468" y2="260" stroke="#3b82f6" stroke-width="0.8" opacity="0.3" class="conn-line-slow"/>
+  <line x1="492" y1="260" x2="548" y2="250" stroke="#3b82f6" stroke-width="0.8" opacity="0.3" class="conn-line-slow"/>
+
+  <!-- Agent nodes -->
+  <!-- Researcher -->
+  <g class="node-float breathe-blue">
+    <circle cx="240" cy="250" r="14" fill="#0d1033" stroke="#3b82f6" stroke-width="1.5" filter="url(#glow)"/>
+    <text x="240" y="255" text-anchor="middle" font-size="12">🔬</text>
+    <text x="240" y="275" class="label" fill="#60a5fa" font-size="8">Researcher</text>
+  </g>
+  <!-- Builder -->
+  <g class="node-float-d1 breathe-blue">
+    <circle cx="320" cy="260" r="14" fill="#0d1033" stroke="#3b82f6" stroke-width="1.5" filter="url(#glow)"/>
+    <text x="320" y="265" text-anchor="middle" font-size="12">🏗️</text>
+    <text x="320" y="285" class="label" fill="#60a5fa" font-size="8">Builder</text>
+  </g>
+  <!-- Lead -->
+  <g class="node-float-d2 breathe-orange">
+    <circle cx="400" cy="265" r="14" fill="#0d1033" stroke="#f97316" stroke-width="1.5" filter="url(#glow)"/>
+    <text x="400" y="270" text-anchor="middle" font-size="12">🎯</text>
+    <text x="400" y="290" class="label" fill="#fb923c" font-size="8">Lead</text>
+  </g>
+  <!-- Writer -->
+  <g class="node-float-d3 breathe-blue">
+    <circle cx="480" cy="260" r="14" fill="#0d1033" stroke="#3b82f6" stroke-width="1.5" filter="url(#glow)"/>
+    <text x="480" y="265" text-anchor="middle" font-size="12">📝</text>
+    <text x="480" y="285" class="label" fill="#60a5fa" font-size="8">Writer</text>
+  </g>
+  <!-- Reviewer -->
+  <g class="node-float-d4 breathe-blue">
+    <circle cx="560" cy="250" r="14" fill="#0d1033" stroke="#22c55e" stroke-width="1.5" filter="url(#glow)"/>
+    <text x="560" y="255" text-anchor="middle" font-size="12">🔍</text>
+    <text x="560" y="275" class="label" fill="#4ade80" font-size="8">Reviewer</text>
+  </g>
+
+  <!-- Mini terminal panel (left) -->
+  <rect x="35" y="140" width="165" height="100" class="panel"/>
+  <rect x="35" y="140" width="165" height="18" rx="6" fill="#1a1a3e"/>
+  <circle cx="47" cy="149" r="3" fill="#ef4444" opacity="0.7"/>
+  <circle cx="56" cy="149" r="3" fill="#f59e0b" opacity="0.7"/>
+  <circle cx="65" cy="149" r="3" fill="#22c55e" opacity="0.7"/>
+  <text x="82" y="152" class="panel-header" font-size="7">TERMINAL</text>
+  <text x="47" y="170" class="panel-text" fill="#22c55e" font-size="7">$</text>
+  <text x="56" y="170" class="panel-text-bright" font-size="7">a2a deploy \</text>
+  <text x="56" y="180" class="panel-text-bright" font-size="7">  --crew "build-api"</text>
+  <text x="47" y="196" class="panel-text" fill="#3b82f6" font-size="7">⟶ spawning 5 agents...</text>
+  <text x="47" y="206" class="panel-text" fill="#22c55e" font-size="7">⟶ crew deployed ✓</text>
+  <text x="47" y="220" class="panel-text" fill="#f97316" font-size="7">⟶ A2A protocol active</text>
+  <rect x="155" y="218" width="6" height="10" fill="#f97316" opacity="0.8" class="cursor-blink"/>
+
+  <!-- Mini agent-card panel (right) -->
+  <rect x="600" y="140" width="165" height="100" class="panel"/>
+  <rect x="600" y="140" width="165" height="18" rx="6" fill="#1a1a3e"/>
+  <text x="612" y="152" class="panel-header">▸ AGENT STATUS</text>
+  <!-- Agent rows -->
+  <circle cx="618" cy="168" r="3" fill="#22c55e" class="status-dot"/>
+  <text x="628" y="171" class="panel-text" font-size="7">🔬 researcher</text>
+  <text x="728" y="171" class="panel-text" fill="#22c55e" font-size="7">active</text>
+  <circle cx="618" cy="182" r="3" fill="#22c55e"/>
+  <text x="628" y="185" class="panel-text" font-size="7">🏗️ builder</text>
+  <text x="728" y="185" class="panel-text" fill="#22c55e" font-size="7">active</text>
+  <circle cx="618" cy="196" r="3" fill="#f97316" class="status-dot"/>
+  <text x="628" y="199" class="panel-text" font-size="7">🎯 lead</text>
+  <text x="718" y="199" class="panel-text" fill="#f97316" font-size="7">routing</text>
+  <circle cx="618" cy="210" r="3" fill="#3b82f6"/>
+  <text x="628" y="213" class="panel-text" font-size="7">📝 writer</text>
+  <text x="722" y="213" class="panel-text" fill="#3b82f6" font-size="7">queued</text>
+  <circle cx="618" cy="224" r="3" fill="#3b82f6"/>
+  <text x="628" y="227" class="panel-text" font-size="7">🔍 reviewer</text>
+  <text x="722" y="227" class="panel-text" fill="#3b82f6" font-size="7">queued</text>
+
+  <!-- Rising particles -->
+  <circle cx="350" cy="320" r="1.5" fill="#3b82f6" class="particle"/>
+  <circle cx="420" cy="330" r="1" fill="#f97316" class="particle-d1"/>
+  <circle cx="380" cy="340" r="1.2" fill="#22c55e" class="particle-d2"/>
+  <circle cx="450" cy="315" r="1" fill="#3b82f6" class="particle-d3"/>
+  <circle cx="300" cy="335" r="1.5" fill="#f97316" class="particle-d4"/>
+  <circle cx="500" cy="325" r="1" fill="#22c55e" class="particle"/>
+  <circle cx="360" cy="350" r="1.2" fill="#3b82f6" class="particle-d2"/>
+  <circle cx="440" cy="345" r="1" fill="#f97316" class="particle-d4"/>
+
+  <!-- Corner decorations -->
+  <path d="M 10 30 L 10 10 L 30 10" fill="none" stroke="#3b82f6" stroke-width="1" opacity="0.4"/>
+  <path d="M 770 10 L 790 10 L 790 30" fill="none" stroke="#3b82f6" stroke-width="1" opacity="0.4"/>
+  <path d="M 10 370 L 10 390 L 30 390" fill="none" stroke="#f97316" stroke-width="1" opacity="0.4"/>
+  <path d="M 770 370 L 790 370 L 790 390" fill="none" stroke="#f97316" stroke-width="1" opacity="0.4"/>
+
+  <!-- Status bar -->
+  <rect x="0" y="378" width="800" height="22" fill="#08081a" opacity="0.8"/>
+  <line x1="0" y1="378" x2="800" y2="378" stroke="#1e1e4a" stroke-width="0.5"/>
+  <circle cx="25" cy="389" r="3" fill="#22c55e" class="status-dot"/>
+  <text x="35" y="393" class="status-text">google a2a protocol</text>
+  <text x="170" y="393" class="status-text" fill="#1e1e4a">│</text>
+  <text x="185" y="393" class="status-text">multi-agent orchestration</text>
+  <text x="365" y="393" class="status-text" fill="#1e1e4a">│</text>
+  <text x="380" y="393" class="status-text">one command</text>
+  <text x="700" y="393" class="status-text" fill="#3b82f6" font-size="8">▸ A2A CREWS v1.0</text>
+</svg>
