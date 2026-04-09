@@ -11,6 +11,7 @@ import { computeWaves } from '../crew/process';
 import { A2ABridge } from '../a2a/bridge';
 import { spawnAgent } from '../spawner/terminal';
 import { generateAgentPrompt } from '../spawner/prompt';
+import { createWorktree, mergeWorktree, removeWorktree, cleanupAllWorktrees, pruneWorktrees } from '../spawner/worktree';
 import { listPresets, loadPreset } from '../templates';
 import { printHeader, printRoles, printTasks, printSummary } from './display';
 
@@ -57,23 +58,26 @@ function isProcessAlive(pid: number): boolean {
 }
 
 // ── Parse --project-dir / -d flag before command dispatch ────────────
-function parseProjectDir(argv: string[]): { projectDir: string; filteredArgs: string[] } {
+function parseProjectDir(argv: string[]): { projectDir: string; filteredArgs: string[]; useWorktrees: boolean } {
   const filtered: string[] = [];
   let dir = process.cwd();
+  let useWorktrees = false;
 
   for (let i = 0; i < argv.length; i++) {
     if ((argv[i] === '--project-dir' || argv[i] === '-d') && argv[i + 1]) {
       dir = resolve(argv[i + 1]);
       i++; // skip value
+    } else if (argv[i] === '--use-worktrees') {
+      useWorktrees = true;
     } else {
       filtered.push(argv[i]);
     }
   }
 
-  return { projectDir: dir, filteredArgs: filtered };
+  return { projectDir: dir, filteredArgs: filtered, useWorktrees };
 }
 
-const { projectDir, filteredArgs } = parseProjectDir(process.argv.slice(2));
+const { projectDir, filteredArgs, useWorktrees } = parseProjectDir(process.argv.slice(2));
 const command = filteredArgs[0];
 const args = filteredArgs.slice(1);
 
@@ -133,7 +137,7 @@ switch (command) {
     await handleApply();
     break;
   case 'launch':
-    await handleLaunch(args[0]);
+    await handleLaunch(args[0], useWorktrees);
     break;
   case 'watch':
     await handleWatch(args[0]);
@@ -343,7 +347,7 @@ async function handleApply(): Promise<void> {
 
 // ── Launch ────────────────────────────────────────────────────────────
 
-async function handleLaunch(teamName?: string): Promise<void> {
+async function handleLaunch(teamName?: string, useWorktrees: boolean = false): Promise<void> {
   // Resolve crew config
   let crewConfig: {
     name: string;
@@ -422,7 +426,11 @@ async function handleLaunch(teamName?: string): Promise<void> {
   })]));
 
   const waves = computeWaves(taskObjects);
-  console.log(`  📊 ${waves.length} waves, ${taskObjects.length} tasks, ${crewConfig.agents.length} agents\n`);
+  console.log(`  📊 ${waves.length} waves, ${taskObjects.length} tasks, ${crewConfig.agents.length} agents`);
+  if (useWorktrees) {
+    console.log(`  🌳 Worktree isolation enabled`);
+  }
+  console.log();
 
   const startTime = Date.now();
   let tasksCompleted = 0;
@@ -431,6 +439,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
   const bridgeTaskIds: Map<string, string> = new Map(); // task.id -> bridge task UUID
   const spawnAttempts: Map<string, number> = new Map(); // task.id -> attempt count
   const taskSubmittedAt: Map<string, number> = new Map(); // task.id -> timestamp of last spawn
+  const agentWorktrees: Map<string, string> = new Map(); // agent.key -> worktree path
 
   const MAX_RETRIES = 3;
   const BASE_TIMEOUT_MS = 10 * 60 * 1000;     // 10 minutes base (was 5 — too aggressive)
@@ -442,6 +451,21 @@ async function handleLaunch(teamName?: string): Promise<void> {
     console.log(`  ── Wave ${waveIdx + 1}/${waves.length} ──────────────────────────────────`);
 
     // Register agents and create tasks on bridge for this wave
+    // If using worktrees, create one per unique agent in this wave
+    const waveAgentKeys = new Set(wave.map(t => t.assignedTo));
+    if (useWorktrees) {
+      for (const agentKey of waveAgentKeys) {
+        if (agentWorktrees.has(agentKey)) continue;
+        try {
+          const wtPath = await createWorktree(projectDir, agentKey);
+          agentWorktrees.set(agentKey, wtPath);
+          console.log(`    🌳 Worktree created for ${agentKey} at ${wtPath}`);
+        } catch (err) {
+          console.log(`    ⚠️  Failed to create worktree for ${agentKey}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    }
+
     for (const task of wave) {
       const agent = agentMap.get(task.assignedTo);
       if (!agent) continue;
@@ -496,12 +520,15 @@ async function handleLaunch(teamName?: string): Promise<void> {
           acceptanceCriteria: t.acceptanceCriteria,
         }));
 
+      const agentWtPath = useWorktrees ? agentWorktrees.get(agent.key) : undefined;
+
       const prompt = generateAgentPrompt({
         agent,
         tasks: agentTasks,
         scenario: crewConfig.scenario,
         bridgeUrl,
         projectDir: projectDir,
+        worktreePath: agentWtPath,
       });
 
       console.log(`    🚀 Spawning ${agent.name} for task "${task.id}"`);
@@ -512,6 +539,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
         model: agent.model,
         bridgeUrl,
         taskId: bridgeTaskIds.get(task.id),
+        worktreePath: agentWtPath,
       });
       spawnAttempts.set(task.id, (spawnAttempts.get(task.id) ?? 0) + 1);
       taskSubmittedAt.set(task.id, Date.now());
@@ -634,12 +662,15 @@ async function handleLaunch(teamName?: string): Promise<void> {
                   acceptanceCriteria: t.acceptanceCriteria,
                 }));
 
+              const retryWtPath = useWorktrees ? agentWorktrees.get(agent.key) : undefined;
+
               const prompt = generateAgentPrompt({
                 agent,
                 tasks: agentTasks,
                 scenario: crewConfig.scenario,
                 bridgeUrl,
                 projectDir: projectDir,
+                worktreePath: retryWtPath,
               });
 
               await spawnAgent({
@@ -649,6 +680,7 @@ async function handleLaunch(teamName?: string): Promise<void> {
                 model: agent.model,
                 bridgeUrl,
                 taskId: retryTaskBody.task.id,
+                worktreePath: retryWtPath,
               });
             }
 
@@ -665,6 +697,30 @@ async function handleLaunch(teamName?: string): Promise<void> {
         waveComplete = true;
         tasksCompleted += wave.length;
         console.log(`    ✅ Wave ${waveIdx + 1} complete (${elapsed}s)\n`);
+
+        // Merge and clean up worktrees for this wave's agents
+        if (useWorktrees) {
+          for (const agentKey of waveAgentKeys) {
+            if (!agentWorktrees.has(agentKey)) continue;
+            try {
+              const merged = await mergeWorktree(projectDir, agentKey);
+              if (merged) {
+                console.log(`    🔀 Merged worktree for ${agentKey}`);
+              } else {
+                console.log(`    ⚠️  Merge conflict for ${agentKey} — manual resolution needed`);
+              }
+            } catch (err) {
+              console.log(`    ⚠️  Merge failed for ${agentKey}: ${err instanceof Error ? err.message : err}`);
+            }
+            try {
+              await removeWorktree(projectDir, agentKey);
+              agentWorktrees.delete(agentKey);
+              console.log(`    🧹 Cleaned up worktree for ${agentKey}`);
+            } catch (err) {
+              console.log(`    ⚠️  Worktree cleanup failed for ${agentKey}: ${err instanceof Error ? err.message : err}`);
+            }
+          }
+        }
       } else if (elapsed % 30 === 0) {
         console.log(`    ⏳ Still waiting... (${elapsed}s)`);
       }
@@ -672,9 +728,22 @@ async function handleLaunch(teamName?: string): Promise<void> {
       // Timeout after 30 min
       if (elapsed > 1800) {
         console.log(`    ⚠️  Wave ${waveIdx + 1} timed out after 30 minutes`);
+        // Clean up worktrees on timeout
+        if (useWorktrees) {
+          console.log(`    🧹 Cleaning up worktrees after timeout...`);
+          await cleanupAllWorktrees(projectDir);
+          agentWorktrees.clear();
+        }
         break;
       }
     }
+  }
+
+  // Final worktree cleanup — catch any leftovers
+  if (useWorktrees && agentWorktrees.size > 0) {
+    console.log(`  🧹 Final worktree cleanup...`);
+    await cleanupAllWorktrees(projectDir);
+    agentWorktrees.clear();
   }
 
   const totalTime = (Date.now() - startTime) / 1000;
@@ -694,8 +763,12 @@ async function handleLaunch(teamName?: string): Promise<void> {
   console.log(`  🌉 Bridge still running on port ${bridge.actualPort}. Run 'crews stop ${teamName}' or press Ctrl+C.`);
 
   // Handle graceful shutdown via Ctrl+C
-  process.on('SIGINT', () => {
+  process.on('SIGINT', async () => {
     console.log('\n  🛑 Stopping bridge...');
+    if (useWorktrees) {
+      console.log('  🧹 Cleaning up worktrees...');
+      await cleanupAllWorktrees(projectDir);
+    }
     bridge.stop();
     unregisterBridge(crewConfig.name);
     process.exit(0);
@@ -888,6 +961,7 @@ function printHelp(): void {
 
   Options:
     --project-dir, -d   Target project directory (default: cwd)
+    --use-worktrees     Give each agent its own git worktree (isolated branches)
 
   Examples:
     crews plan "Build a REST API with auth and tests"

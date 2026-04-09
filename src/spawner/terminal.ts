@@ -57,16 +57,20 @@ export async function spawnAgent(config: {
   model?: string;
   bridgeUrl: string;
   taskId?: string;
+  worktreePath?: string;
 }): Promise<void> {
   const platform = detectPlatform();
   const modelFlag = config.model ? ` --model "${config.model}"` : '';
+
+  // If worktreePath is provided, use it as the working directory
+  const effectiveCwd = config.worktreePath ?? config.cwd;
 
   // Use taskId in filenames to avoid EBUSY race when multiple tasks share the same role (#22)
   const uniqueSuffix = config.taskId ? config.taskId.slice(0, 8) : crypto.randomUUID().slice(0, 8);
   const fileBase = `${config.name}-${uniqueSuffix}`;
 
   // Write prompt to temp file to avoid quoting issues
-  const promptFile = `${config.cwd}/.a2a-crews-prompt-${fileBase}.txt`.replace(/\//g, platform === 'windows' ? '\\' : '/');
+  const promptFile = `${effectiveCwd}/.a2a-crews-prompt-${fileBase}.txt`.replace(/\//g, platform === 'windows' ? '\\' : '/');
   await Bun.write(promptFile, config.prompt);
 
   // Build post-completion bridge notification (JSON-RPC primary, REST fallback)
@@ -87,7 +91,7 @@ export async function spawnAgent(config: {
   await spawnTab({
     title: `${fileBase} (a2a-crews)`,
     command,
-    cwd: config.cwd,
+    cwd: effectiveCwd,
   });
 
   // Small delay between spawns to avoid terminal race

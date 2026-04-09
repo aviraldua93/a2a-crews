@@ -7,6 +7,7 @@ export interface PromptContext {
   scenario: string;
   bridgeUrl: string;
   projectDir: string;
+  worktreePath?: string;
 }
 
 export function generateAgentPrompt(ctx: PromptContext): string {
@@ -22,12 +23,17 @@ export function generateAgentPrompt(ctx: PromptContext): string {
 
   const toolsList = ctx.agent.allowedTools.map(t => `  - ${t}`).join('\n');
 
+  const worktreeNote = ctx.worktreePath
+    ? `\nWORKTREE ISOLATION: You are working in a git worktree at ${ctx.worktreePath}. Changes are isolated to your branch. Do not switch branches.\n`
+    : '';
+
   return `You are the ${ctx.agent.name} on an A2A-coordinated team.
 
-PROJECT: ${ctx.projectDir}
+PROJECT: ${ctx.worktreePath ?? ctx.projectDir}
 SCENARIO: ${ctx.scenario}
 YOUR ROLE: ${ctx.agent.description}
 BRIDGE: ${ctx.bridgeUrl}
+${worktreeNote}
 
 YOUR TASKS:
 ${taskList}
