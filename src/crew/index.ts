@@ -1,9 +1,11 @@
-export { Crew } from './crew';
-export type { CrewConfig, CrewOutput, TaskOutput } from './crew';
+export { Crew, crewGoalId, crewCompletionEvaluator } from './crew';
+export type { CrewConfig, CrewOutput, TaskOutput, TaskRunResult, TaskRunner, KickoffOptions } from './crew';
 export { Agent } from './agent';
 export type { AgentConfig } from './agent';
 export { Task } from './task';
 export type { TaskConfig, TaskStatus } from './task';
 export { computeWaves } from './process';
+export { createCheckpoint, checkpointToString, toGoalCheckpointDraft } from './checkpoint';
+export type { Checkpoint, GoalCheckpointBridge } from './checkpoint';
 export { eventBus } from './events';
 export type { EventType, CrewEvent } from './events';

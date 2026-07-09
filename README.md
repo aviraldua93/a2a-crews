@@ -236,6 +236,22 @@ crews goal pause | resume      # pause / re-prime from durable state and continu
 crews goal clear               # write a retrospective; keep history
 ```
 
+### Running a crew as a goal loop
+
+`Crew.kickoff()` ([`src/crew/crew.ts`](src/crew/crew.ts)) is the durable loop controller. It schedules tasks into waves and drives each wave as one checkpoint/evaluator cycle: it runs the wave's tasks (the worker), surfaces machine-checkable evidence (`tasks_completed` / `tasks_total` / `tasks_failed` + exit code) to a **separate** evaluator (`crewCompletionEvaluator` by default — a distinct id from the worker), writes a durable, idempotent checkpoint under `audits/goals/<id>/`, and stops when every task is completed. Task execution is injected via `runTask`, so the same controller drives tests, dry runs, and real (bridge-backed) execution.
+
+```ts
+import { Crew } from './src/crew';
+
+const out = await crew.kickoff({
+  // Execute one task; production supplies a bridge-backed runner.
+  runTask: async (task) => ({ taskId: task.id, status: 'completed', durationMs: 0 }),
+});
+// out.tasks / out.waves / out.totalTime — durable log under audits/goals/crew-<name>/
+```
+
+Re-running the same crew appends **no duplicate** checkpoints (content-keyed), durable files are git-staged on every checkpoint, and timestamps come from the JS runtime (cross-platform). This feature was **dogfooded**: the goal contract and per-checkpoint evaluator log used to build it live in [`audits/goals/goal-loop-feature/`](audits/goals/goal-loop-feature/).
+
 ---
 
 <details>
