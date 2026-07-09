@@ -1,0 +1,5 @@
+{
+  "name": "goal",
+  "version": "0.1.0",
+  "description": "Canonical /goal front door for durable, autonomous work: a 7-field contract with a transcript-verifiable stopping condition, a separate per-turn evaluator, two-tier git-tracked memory, and pause/resume/clear checkpoint semantics."
+}

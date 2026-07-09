@@ -1,0 +1,56 @@
+{
+  "scenario_id": "attempt-counter",
+  "description": "The per-slice attempt counter defaults to 0 and increments by exactly one, so it never double-counts (off-by-one guard).",
+  "steps": [
+    {
+      "action": "set_goal",
+      "condition": "crew retry loop handles transient A2A errors",
+      "expected": {
+        "attempts": 0
+      }
+    },
+    {
+      "action": "checkpoint_fail",
+      "same_slice": true,
+      "reason": "retry gives up too early",
+      "expected": {
+        "attempts": 1,
+        "consecutive_failures": 1
+      }
+    },
+    {
+      "action": "checkpoint_fail",
+      "same_slice": true,
+      "reason": "still bails on HTTP 429",
+      "expected": {
+        "attempts": 2,
+        "consecutive_failures": 2,
+        "state": "paused"
+      }
+    },
+    {
+      "action": "resume",
+      "expected": {
+        "state": "active",
+        "consecutive_failures": 0,
+        "attempts": 2
+      }
+    },
+    {
+      "action": "checkpoint_pass",
+      "reason": "exponential backoff added; retries succeed",
+      "expected": {
+        "attempts": 0
+      }
+    },
+    {
+      "action": "evaluator_met",
+      "reason": "retry loop verified"
+    }
+  ],
+  "expected_final": {
+    "state": "completed",
+    "attempts": 0,
+    "checkpoints": 3
+  }
+}

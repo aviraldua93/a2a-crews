@@ -1,0 +1,49 @@
+{
+  "scenario_id": "idempotent-durable-export",
+  "description": "A durable checkpoint export stages the audit files (git add equivalent) and is idempotent: re-running with the same id never creates a duplicate entry.",
+  "steps": [
+    {
+      "action": "set_goal",
+      "condition": "docs site builds with zero broken links"
+    },
+    {
+      "action": "export_checkpoint",
+      "checkpoint_id": "cp-1",
+      "expected": {
+        "exports": 1,
+        "staged": true,
+        "last_reason": "checkpoint cp-1 exported and staged"
+      }
+    },
+    {
+      "action": "export_checkpoint",
+      "checkpoint_id": "cp-1",
+      "expected": {
+        "exports": 1,
+        "staged": true,
+        "last_reason": "duplicate export skipped for cp-1"
+      }
+    },
+    {
+      "action": "export_checkpoint",
+      "checkpoint_id": "cp-2",
+      "expected": {
+        "exports": 2,
+        "staged": true
+      }
+    },
+    {
+      "action": "checkpoint_pass",
+      "reason": "link checker green"
+    },
+    {
+      "action": "evaluator_met",
+      "reason": "docs build verified"
+    }
+  ],
+  "expected_final": {
+    "state": "completed",
+    "exports": 2,
+    "staged": true
+  }
+}

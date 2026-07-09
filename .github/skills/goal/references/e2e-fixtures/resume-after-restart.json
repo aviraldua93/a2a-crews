@@ -1,0 +1,40 @@
+{
+  "scenario_id": "resume-after-restart",
+  "description": "Active goal is restored on session resume while turns/token baselines reset.",
+  "steps": [
+    {
+      "action": "set_goal",
+      "condition": "all docs links are fixed"
+    },
+    {
+      "action": "checkpoint_pass",
+      "tokens": 3200
+    },
+    {
+      "action": "evaluator_not_met",
+      "reason": "2 links still broken"
+    },
+    {
+      "action": "restart_resume",
+      "expected": {
+        "state": "active",
+        "active_condition": "all docs links are fixed",
+        "turns": 0,
+        "token_spend": 0,
+        "attempts": 0
+      }
+    },
+    {
+      "action": "checkpoint_pass",
+      "tokens": 900
+    },
+    {
+      "action": "evaluator_met"
+    }
+  ],
+  "expected_final": {
+    "state": "completed",
+    "achieved_condition": "all docs links are fixed",
+    "turns": 1
+  }
+}
