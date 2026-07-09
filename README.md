@@ -182,6 +182,78 @@ The framework handles planning, spawning, coordination, and retry. Your agents d
 
 ---
 
+## Goal loop
+
+For long-running, coherent work with a clear success condition, wrap a crew run in a **goal loop**. A goal is a durable, evaluator-graded contract: once set, the crew works in checkpoints toward a **transcript-verifiable stopping condition** without per-turn steering, and stops when that condition is provably met.
+
+**A goal is a 7-field contract** (`src/goal/contract.ts`):
+
+| Field | Answers |
+|---|---|
+| `objective` | What is the crew trying to achieve? |
+| `stoppingCondition` | Exactly when to stop — a runnable command, measurable threshold, or observable artifact. |
+| `validationLoop` | The command that proves progress at every checkpoint. |
+| `inputsToReadFirst` | Files/docs to read before acting. |
+| `constraints` | Hard rules that must hold throughout. |
+| `forbiddenMoves` | Specific actions the crew must not take. |
+| `checkpointCadence` | What proves a checkpoint complete. |
+
+`executionContext` (cwd, shell, timeout, services, side-effect boundaries) is optional but recommended.
+
+**How the loop runs.** On each turn the [`GoalRunner`](src/goal/runner.ts) (a) runs the worker, (b) invokes a **separate evaluator** — the worker never grades itself — that grades progress from *surfaced evidence only* and records `reason` / `command` / `result`, (c) writes a checkpoint per cadence, and (d) stops when the stopping condition is met. It **auto-pauses after two consecutive validation failures** on the same slice so it never compounds bad work.
+
+**Two-tier memory.** Working state (in-memory plan + turn/token counters + latest checkpoint) lives in the runner; **durable** state is persisted to `audits/goals/<id>/` (the 7-field contract in `contract.json` + `goal.md`, an append-only `checkpoints.jsonl`, and a `retrospective.md` on clear) so it is git-trackable and survives a lost session.
+
+The evaluator is a pluggable interface — supply any grader from a2a-crews' model/provider layer via `functionEvaluator`, or use the conservative `DefaultEvaluator`.
+
+```ts
+import { GoalRunner, DefaultEvaluator, crewWorker } from './src/goal';
+
+const runner = new GoalRunner();
+runner.start({
+  objective: 'Migrate internal/api from Gin to chi',
+  stoppingCondition: '`bun test` exits 0 and coverage >= 80%',
+  validationLoop: 'bun test --coverage',
+  inputsToReadFirst: ['src/api/router.ts'],
+  constraints: ['No route shape changes'],
+  forbiddenMoves: ['Do not open a PR'],
+  checkpointCadence: 'every file migrated + tests green',
+});
+
+// Wrap a crew run as the worker; a SEPARATE evaluator grades each turn.
+const worker = crewWorker(crew, ({ turn }) => runNextSlice(turn));
+await runner.run(worker, new DefaultEvaluator());
+```
+
+**CLI** (lifecycle equivalent to the slash commands):
+
+```bash
+crews goal start goal.json     # activate a 7-field contract (replaces any prior goal)
+crews goal status              # condition, turns, tokens, checkpoints, latest evaluator reason
+crews goal show                # print the full contract
+crews goal checkpoint "note"   # force-write a checkpoint now
+crews goal pause | resume      # pause / re-prime from durable state and continue
+crews goal clear               # write a retrospective; keep history
+```
+
+### Running a crew as a goal loop
+
+`Crew.kickoff()` ([`src/crew/crew.ts`](src/crew/crew.ts)) is the durable loop controller. It schedules tasks into waves and drives each wave as one checkpoint/evaluator cycle: it runs the wave's tasks (the worker), surfaces machine-checkable evidence (`tasks_completed` / `tasks_total` / `tasks_failed` + exit code) to a **separate** evaluator (`crewCompletionEvaluator` by default — a distinct id from the worker), writes a durable, idempotent checkpoint under `audits/goals/<id>/`, and stops when every task is completed. Task execution is injected via `runTask`, so the same controller drives tests, dry runs, and real (bridge-backed) execution.
+
+```ts
+import { Crew } from './src/crew';
+
+const out = await crew.kickoff({
+  // Execute one task; production supplies a bridge-backed runner.
+  runTask: async (task) => ({ taskId: task.id, status: 'completed', durationMs: 0 }),
+});
+// out.tasks / out.waves / out.totalTime — durable log under audits/goals/crew-<name>/
+```
+
+Re-running the same crew appends **no duplicate** checkpoints (content-keyed), durable files are git-staged on every checkpoint, and timestamps come from the JS runtime (cross-platform). This feature was **dogfooded**: the goal contract and per-checkpoint evaluator log used to build it live in [`audits/goals/goal-loop-feature/`](audits/goals/goal-loop-feature/).
+
+---
+
 <details>
 <summary><strong>Under the Hood — Real A2A Protocol</strong></summary>
 

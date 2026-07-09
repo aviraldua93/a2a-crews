@@ -9,7 +9,13 @@ type EventType =
   | 'task:failed'
   | 'agent:spawned'
   | 'agent:died'
-  | 'agent:retried';
+  | 'agent:retried'
+  | 'goal:started'
+  | 'goal:checkpoint'
+  | 'goal:paused'
+  | 'goal:resumed'
+  | 'goal:completed'
+  | 'goal:cleared';
 
 interface CrewEvent {
   type: EventType;
