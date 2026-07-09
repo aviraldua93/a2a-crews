@@ -1,9 +1,10 @@
 # Goal: Implement a durable goal-loop feature in a2a-crews
 
-**State:** active
+**State:** completed
 **Id:** goal-loop-feature
 **Branch:** feat/goal-loop
 **Started:** 2026-07-09T13:03:12-07:00
+**Achieved:** 2026-07-09T13:58-07:00 — branch pushed (`9a2e0de`), PR #28 updated, `bun test` 231 pass / `bun x tsc --noEmit` exit 0
 **Autopilot:** yes
 
 > Dogfooding note: this contract was adopted **before** writing the deeper

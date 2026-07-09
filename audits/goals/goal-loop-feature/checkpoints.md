@@ -135,3 +135,32 @@ pasted below.
 
 ---
 
+## Checkpoint 6 — Shipped: branch pushed, PR updated
+**When:** 2026-07-09T13:58-07:00 · **Turn:** 6 · **Cadence:** stopping condition
+
+**Worker**
+- Committed the integration + dogfooding artifacts as `9a2e0de`
+  (`feat(crew): drive Crew.kickoff() as a durable goal loop`) with the required
+  trailers, authored as the personal account's noreply identity.
+- Pushed `feat/goal-loop` → `origin` (`d8edc4d..9a2e0de`) as the personal
+  account. PR #28 (`aviraldua93/a2a-crews`) auto-updates with these commits.
+
+**Files:** (ship — no source changes beyond commit `9a2e0de`)
+
+**Evaluator pass** (id `goal-loop-evaluator`, separate from worker)
+- Command: `bun x tsc --noEmit` → `tsc_exit=0`
+- Command: `bun test` → **231 pass, 0 fail, 797 expect() calls, 18 files**
+- Command: `gh auth status --active` → `Active account: true` for the personal
+  account (push authorized; no fallback account used).
+- Command: `git push origin feat/goal-loop` → `d8edc4d..9a2e0de` (accepted).
+- Judgment: branch pushed **and** PR open (`.../pull/28`) **and** `bun test`
+  (0 failures) + `bun x tsc --noEmit` (exit 0) green with output pasted above.
+  All clauses of the stopping condition are satisfied and transcript-verifiable.
+- Progress: 1.0 · conditionMet: **true**
+
+**Outcome:** goal `goal-loop-feature` **completed**. Worker and evaluator stayed
+distinct steps throughout; every checkpoint was durable, staged, and idempotent.
+
+---
+
+
