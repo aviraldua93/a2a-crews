@@ -1,0 +1,40 @@
+{
+  "scenario_id": "happy-path",
+  "description": "Set a goal, make progress checkpoints, and complete when the evaluator says the condition is met.",
+  "steps": [
+    {
+      "action": "set_goal",
+      "condition": "all tests in tests/crew pass and bun x tsc --noEmit is clean",
+      "expected": {
+        "state": "active",
+        "active_condition": "all tests in tests/crew pass and bun x tsc --noEmit is clean",
+        "turns": 0
+      }
+    },
+    {
+      "action": "checkpoint_pass",
+      "reason": "crew tests now green"
+    },
+    {
+      "action": "evaluator_not_met",
+      "reason": "typecheck still reports one error"
+    },
+    {
+      "action": "checkpoint_pass",
+      "reason": "typecheck clean"
+    },
+    {
+      "action": "evaluator_met",
+      "reason": "condition is satisfied",
+      "expected": {
+        "state": "completed",
+        "active_condition": null
+      }
+    }
+  ],
+  "expected_final": {
+    "state": "completed",
+    "achieved_condition": "all tests in tests/crew pass and bun x tsc --noEmit is clean",
+    "checkpoints": 2
+  }
+}

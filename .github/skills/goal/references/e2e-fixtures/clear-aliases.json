@@ -1,0 +1,36 @@
+{
+  "scenario_id": "clear-aliases",
+  "description": "Clear aliases behave like /goal clear and preserve achieved history untouched.",
+  "steps": [
+    {
+      "action": "set_goal",
+      "condition": "finish changelog sweep"
+    },
+    {
+      "action": "checkpoint_pass"
+    },
+    {
+      "action": "cancel",
+      "expected": {
+        "state": "cleared",
+        "active_condition": null,
+        "last_reason": "goal cancel"
+      }
+    },
+    {
+      "action": "set_goal",
+      "condition": "finish release notes"
+    },
+    {
+      "action": "off",
+      "expected": {
+        "state": "cleared",
+        "active_condition": null,
+        "last_reason": "goal off"
+      }
+    }
+  ],
+  "expected_final": {
+    "state": "cleared"
+  }
+}

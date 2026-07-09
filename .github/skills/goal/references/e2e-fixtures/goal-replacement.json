@@ -1,0 +1,37 @@
+{
+  "scenario_id": "goal-replacement",
+  "description": "A new /goal condition while active replaces the old goal and resets counters.",
+  "steps": [
+    {
+      "action": "set_goal",
+      "condition": "migrate planner to A2A SDK v0.4"
+    },
+    {
+      "action": "checkpoint_pass",
+      "tokens": 2500
+    },
+    {
+      "action": "set_goal",
+      "condition": "migrate spawner to A2A SDK v0.4",
+      "expected": {
+        "state": "active",
+        "active_condition": "migrate spawner to A2A SDK v0.4",
+        "turns": 0,
+        "token_spend": 0,
+        "checkpoints": 0
+      }
+    },
+    {
+      "action": "checkpoint_pass",
+      "tokens": 1200
+    },
+    {
+      "action": "evaluator_met"
+    }
+  ],
+  "expected_final": {
+    "state": "completed",
+    "achieved_condition": "migrate spawner to A2A SDK v0.4",
+    "turns": 1
+  }
+}

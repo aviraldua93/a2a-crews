@@ -1,0 +1,43 @@
+{
+  "scenario_id": "auto-pause-resume",
+  "description": "Two failures on the same slice auto-pause the goal; resume then complete.",
+  "steps": [
+    {
+      "action": "set_goal",
+      "condition": "crew package coverage is at least 80 percent"
+    },
+    {
+      "action": "checkpoint_fail",
+      "same_slice": true,
+      "reason": "coverage 74.1"
+    },
+    {
+      "action": "checkpoint_fail",
+      "same_slice": true,
+      "reason": "coverage 74.7",
+      "expected": {
+        "state": "paused",
+        "consecutive_failures": 2
+      }
+    },
+    {
+      "action": "resume",
+      "expected": {
+        "state": "active",
+        "consecutive_failures": 0
+      }
+    },
+    {
+      "action": "checkpoint_pass",
+      "reason": "coverage 80.3"
+    },
+    {
+      "action": "evaluator_met",
+      "reason": "target met"
+    }
+  ],
+  "expected_final": {
+    "state": "completed",
+    "checkpoints": 3
+  }
+}
