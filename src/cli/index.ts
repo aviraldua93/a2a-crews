@@ -13,7 +13,8 @@ import { spawnAgent } from '../spawner/terminal';
 import { generateAgentPrompt } from '../spawner/prompt';
 import { createWorktree, mergeWorktree, removeWorktree, cleanupAllWorktrees, pruneWorktrees } from '../spawner/worktree';
 import { listPresets, loadPreset } from '../templates';
-import { printHeader, printRoles, printTasks, printSummary } from './display';
+import { printHeader, printRoles, printTasks, printSummary, printGoalStatus } from './display';
+import { GoalRunner, GoalStore, validateContract, type GoalContract } from '../goal';
 
 // ── Central bridge registry (#19) ──────────────────────────────────
 const REGISTRY_DIR = join(homedir(), '.a2a-crews', 'active-bridges');
@@ -147,6 +148,9 @@ switch (command) {
     break;
   case 'templates':
     handleTemplates();
+    break;
+  case 'goal':
+    await handleGoal(args);
     break;
   default:
     printHelp();
@@ -943,6 +947,154 @@ function handleTemplates(): void {
   console.log('  Use: crews plan "<scenario>" to auto-select a template.\n');
 }
 
+// ── Goal loop ─────────────────────────────────────────────────────────
+
+async function handleGoal(argv: string[]): Promise<void> {
+  const sub = (argv[0] ?? 'status').toLowerCase();
+  const store = new GoalStore({ baseDir: projectDir });
+  const runner = new GoalRunner({ store, emitEvents: false });
+
+  // Load the current goal: active first, else the most recent paused one.
+  const loadCurrent = (): boolean => {
+    if (runner.loadActive()) return true;
+    const paused = store.listRecords().filter(r => r.state === 'paused');
+    if (paused.length > 0) {
+      runner.load(paused[paused.length - 1].id);
+      return true;
+    }
+    return false;
+  };
+
+  switch (sub) {
+    case 'status': {
+      if (!loadCurrent()) {
+        printHeader('GOAL');
+        console.log('  No active goal. Start one with:');
+        console.log('    crews goal start <contract.json>\n');
+        return;
+      }
+      printGoalStatus(runner.status());
+      return;
+    }
+
+    case 'show': {
+      if (!loadCurrent()) {
+        console.log('  No goal to show.');
+        return;
+      }
+      const shown = runner.show();
+      if (shown) console.log(`\n${shown.markdown}`);
+      return;
+    }
+
+    case 'list': {
+      const records = store.listRecords();
+      printHeader('GOALS');
+      if (records.length === 0) {
+        console.log('  (none)\n');
+        return;
+      }
+      for (const r of records) {
+        console.log(`  [${r.state.padEnd(9)}] ${r.id}`);
+        console.log(`       ${r.contract.objective}`);
+      }
+      console.log();
+      return;
+    }
+
+    case 'start':
+    case 'set': {
+      const file = argv[1];
+      if (!file) {
+        console.log('  Usage: crews goal start <contract.json>');
+        return;
+      }
+      const path = resolve(projectDir, file);
+      if (!existsSync(path)) {
+        console.log(`  Contract file not found: ${path}`);
+        return;
+      }
+      let parsed: Partial<GoalContract>;
+      try {
+        parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<GoalContract>;
+      } catch (e) {
+        console.log(`  Invalid JSON: ${(e as Error).message}`);
+        return;
+      }
+      const validation = validateContract(parsed);
+      if (!validation.valid) {
+        printHeader('GOAL — INVALID CONTRACT');
+        if (validation.missing.length) console.log(`  Missing fields: ${validation.missing.join(', ')}`);
+        for (const err of validation.errors) console.log(`  ✗ ${err}`);
+        console.log();
+        return;
+      }
+      const record = runner.start(parsed);
+      printHeader('GOAL ACTIVATED');
+      console.log(`  ${record.contract.objective}`);
+      console.log(`  Stopping condition: ${record.contract.stoppingCondition}`);
+      console.log(`  Durable state: audits/goals/${record.id}/\n`);
+      return;
+    }
+
+    case 'checkpoint': {
+      if (!loadCurrent()) {
+        console.log('  No goal to checkpoint.');
+        return;
+      }
+      const title = argv.slice(1).join(' ') || undefined;
+      const cp = runner.checkpoint({ title });
+      console.log(`  ✅ Checkpoint #${cp.checkpointNumber} → audits/goals/${cp.goalId}/checkpoints.jsonl`);
+      return;
+    }
+
+    case 'pause': {
+      if (!loadCurrent()) {
+        console.log('  No active goal to pause.');
+        return;
+      }
+      try {
+        printGoalStatus(runner.pause());
+      } catch (e) {
+        console.log(`  ${(e as Error).message}`);
+      }
+      return;
+    }
+
+    case 'resume': {
+      if (!loadCurrent()) {
+        console.log('  No goal to resume.');
+        return;
+      }
+      try {
+        printGoalStatus(runner.resume());
+      } catch (e) {
+        console.log(`  ${(e as Error).message}`);
+      }
+      return;
+    }
+
+    case 'clear':
+    case 'stop':
+    case 'off':
+    case 'reset':
+    case 'none':
+    case 'cancel': {
+      if (!loadCurrent()) {
+        console.log('  No goal to clear.');
+        return;
+      }
+      runner.clear(sub);
+      console.log(`  Goal cleared (${sub}). Retrospective written; history kept.\n`);
+      return;
+    }
+
+    default:
+      console.log(`  Unknown goal subcommand: ${sub}`);
+      console.log('  Try: status | show | list | start <file> | checkpoint | pause | resume | clear');
+  }
+}
+
 // ── Help ──────────────────────────────────────────────────────────────
 
 function printHelp(): void {
@@ -958,6 +1110,16 @@ function printHelp(): void {
     watch [name]        Stream live status from agents
     stop [name]         Cancel all tasks and stop agents
     templates           List all available crew templates
+    goal <subcommand>   Drive a durable, evaluator-graded goal loop
+
+  Goal subcommands:
+    goal status            Show the active goal (default)
+    goal show              Print the full goal contract
+    goal list              List every goal in audits/goals/
+    goal start <file>      Activate a goal from a 7-field contract JSON
+    goal checkpoint [note] Force-write a checkpoint now
+    goal pause | resume    Pause / re-prime and continue the loop
+    goal clear             Clear the goal and write a retrospective
 
   Options:
     --project-dir, -d   Target project directory (default: cwd)
