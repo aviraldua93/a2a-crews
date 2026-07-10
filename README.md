@@ -61,6 +61,22 @@ npm run dev -- watch <team-name>
 npm run dev -- stop <team-name>
 ```
 
+### Goal loop
+
+`crews goal` drives a durable, evaluator-graded goal loop whose state is persisted under `audits/goals/`:
+
+```bash
+# Show the active goal (default), or print the full contract
+npm run dev -- goal status
+npm run dev -- goal show
+
+# Activate a goal from a 7-field contract JSON, then pause/resume/clear
+npm run dev -- goal start path/to/contract.json
+npm run dev -- goal pause
+npm run dev -- goal resume
+npm run dev -- goal clear
+```
+
 The CLI writes runtime state under `.a2a-crews/` in the target project. That directory is ignored by git.
 
 ## How to test
